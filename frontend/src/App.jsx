@@ -216,8 +216,9 @@ export default function App() {
 
   const cleanPlantingData = (data) => {
     const clean = {};
-    const allowed = ['seed_id', 'structure_id', 'year', 'quantity', 'indoor_start_date',
-      'hardening_date', 'transplant_date', 'direct_sow_date', 'first_harvest_date', 'status', 'notes'];
+    const allowed = ['seed_id', 'structure_id', 'year', 'qty_started', 'qty_planted',
+      'indoor_start_date', 'hardening_date', 'transplant_date', 'direct_sow_date',
+      'first_harvest_date', 'status', 'notes'];
     allowed.forEach(key => {
       if (data[key] !== undefined) clean[key] = data[key];
     });
@@ -324,10 +325,10 @@ export default function App() {
     }
   });
 
-  const totalPlants = plantings.reduce((sum, p) => sum + (p.quantity || 1), 0);
+  const totalStarted = plantings.reduce((sum, p) => sum + (p.qty_started || 0), 0);
+  const totalPlanted = plantings.reduce((sum, p) => sum + (p.qty_planted || 0), 0);
   const activePlantings = plantings.filter(p => p.status !== 'done');
-  const activePlantCount = activePlantings.reduce((sum, p) => sum + (p.quantity || 1), 0);
-  const harvestingCount = plantings.filter(p => p.status === 'harvesting').reduce((sum, p) => sum + (p.quantity || 1), 0);
+  const harvestingCount = plantings.filter(p => p.status === 'harvesting').reduce((sum, p) => sum + (p.qty_planted || p.qty_started || 0), 0);
 
   // ── Suggested dates (Zone 6b, last frost April 15) ────────────────────────
 
@@ -677,9 +678,16 @@ export default function App() {
           </select>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Quantity</label>
-          <input type="number" className="form-input" value={editData.quantity || ''} onChange={e => setEditData(d => ({ ...d, quantity: parseInt(e.target.value) || null }))} placeholder="Number of plants/seeds" />
+        <div className="grid-2">
+          <div className="form-group">
+            <label className="form-label">Started (under lights)</label>
+            <input type="number" className="form-input" value={editData.qty_started || ''} onChange={e => setEditData(d => ({ ...d, qty_started: parseInt(e.target.value) || null }))} placeholder="e.g. 12" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Planted / Projected</label>
+            <input type="number" className="form-input" value={editData.qty_planted || ''} onChange={e => setEditData(d => ({ ...d, qty_planted: parseInt(e.target.value) || null }))} placeholder="e.g. 6" />
+            <div style={{ fontSize: 11, color: '#8a8580', marginTop: 4 }}>Can set ahead of transplant date as a projection</div>
+          </div>
         </div>
 
         <div className="grid-2">
@@ -817,12 +825,12 @@ export default function App() {
           <div className="stat-label">Seed Varieties</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{totalPlants}</div>
-          <div className="stat-label">Total Plants</div>
+          <div className="stat-value">{totalStarted}</div>
+          <div className="stat-label">Started</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{activePlantCount}</div>
-          <div className="stat-label">Active</div>
+          <div className="stat-value">{totalPlanted}</div>
+          <div className="stat-label">Planted / Projected</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{harvestingCount}</div>
@@ -842,7 +850,11 @@ export default function App() {
                 <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: statusColor(p.status) }}></span>
                 <span style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{p.seed_name}</span>
                 <span className="badge badge-category" style={{ background: catColor(p.category) }}>{p.category}</span>
-                <span style={{ fontSize: 12, color: '#8a8580', minWidth: 24, textAlign: 'right' }}>×{p.quantity || 1}</span>
+                <span style={{ fontSize: 12, color: '#8a8580', whiteSpace: 'nowrap' }}>
+                  {p.qty_started ? `${p.qty_started} started` : ''}
+                  {p.qty_started && p.qty_planted ? ' → ' : ''}
+                  {p.qty_planted ? `${p.qty_planted} planted` : ''}
+                </span>
                 <span style={{ fontSize: 12, color: '#8a8580' }}>{p.structure_name || 'Unassigned'}</span>
               </div>
             ))}
@@ -1042,9 +1054,10 @@ export default function App() {
             <tr>
               <th>Variety</th>
               <th>Location</th>
-              <th>Qty</th>
-              <th>Status</th>
               <th>Started</th>
+              <th>Planted</th>
+              <th>Status</th>
+              <th>Indoor Start</th>
               <th>Transplant</th>
               <th>Direct Sow</th>
               <th>Photos</th>
@@ -1061,16 +1074,35 @@ export default function App() {
                 <td>{p.structure_name || <span style={{ color: '#ccc' }}>—</span>}</td>
                 <td onClick={e => e.stopPropagation()}>
                   <input
-                    type="number"
-                    min="0"
-                    value={p.quantity ?? 1}
+                    type="number" min="0"
+                    value={p.qty_started ?? ''}
+                    placeholder="—"
                     onChange={async e => {
-                      const qty = parseInt(e.target.value) || 0;
-                      await api.put(`/api/plantings/${p.id}`, { quantity: qty });
+                      await api.put(`/api/plantings/${p.id}`, { qty_started: parseInt(e.target.value) || null });
                       loadData();
                     }}
                     style={{ width: 52, padding: '2px 6px', border: '1px solid #e8e4dd', borderRadius: 6, fontSize: 13, textAlign: 'center' }}
                   />
+                </td>
+                <td onClick={e => e.stopPropagation()}>
+                  {(() => {
+                    const isProjected = p.transplant_date && new Date(p.transplant_date + 'T00:00:00') > new Date();
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input
+                          type="number" min="0"
+                          value={p.qty_planted ?? ''}
+                          placeholder="—"
+                          onChange={async e => {
+                            await api.put(`/api/plantings/${p.id}`, { qty_planted: parseInt(e.target.value) || null });
+                            loadData();
+                          }}
+                          style={{ width: 52, padding: '2px 6px', border: `1px solid ${isProjected ? '#fbbf24' : '#e8e4dd'}`, borderRadius: 6, fontSize: 13, textAlign: 'center', background: isProjected ? '#fffbeb' : '#fff' }}
+                        />
+                        {isProjected && <span title="Projected — transplant date in future" style={{ fontSize: 11, color: '#d97706' }}>proj.</span>}
+                      </div>
+                    );
+                  })()}
                 </td>
                 <td>
                   <span className="status-dot" style={{ background: statusColor(p.status) }}></span>

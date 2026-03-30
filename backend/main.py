@@ -70,6 +70,8 @@ def init_db():
             structure_id TEXT REFERENCES structures(id),
             year INTEGER DEFAULT 2026,
             quantity INTEGER,
+            qty_started INTEGER,
+            qty_planted INTEGER,
             indoor_start_date TEXT,
             hardening_date TEXT,
             transplant_date TEXT,
@@ -141,13 +143,29 @@ def init_db():
 init_db()
 
 
+def migrate_db():
+    """Add new columns to existing databases without losing data."""
+    conn = get_db()
+    existing = [row[1] for row in conn.execute("PRAGMA table_info(plantings)").fetchall()]
+    if "qty_started" not in existing:
+        conn.execute("ALTER TABLE plantings ADD COLUMN qty_started INTEGER")
+        conn.execute("UPDATE plantings SET qty_started = quantity WHERE quantity IS NOT NULL")
+    if "qty_planted" not in existing:
+        conn.execute("ALTER TABLE plantings ADD COLUMN qty_planted INTEGER")
+    conn.commit()
+    conn.close()
+
+migrate_db()
+
+
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class PlantingCreate(BaseModel):
     seed_id: str
     structure_id: Optional[str] = None
     year: int = 2026
-    quantity: Optional[int] = None
+    qty_started: Optional[int] = None
+    qty_planted: Optional[int] = None
     indoor_start_date: Optional[str] = None
     hardening_date: Optional[str] = None
     transplant_date: Optional[str] = None
@@ -159,7 +177,8 @@ class PlantingCreate(BaseModel):
 
 class PlantingUpdate(BaseModel):
     structure_id: Optional[str] = None
-    quantity: Optional[int] = None
+    qty_started: Optional[int] = None
+    qty_planted: Optional[int] = None
     indoor_start_date: Optional[str] = None
     hardening_date: Optional[str] = None
     transplant_date: Optional[str] = None
@@ -302,11 +321,11 @@ def create_planting(data: PlantingCreate):
         conn.close()
         raise HTTPException(404, "Seed not found")
     cursor = conn.execute(
-        """INSERT INTO plantings (seed_id, structure_id, year, quantity,
+        """INSERT INTO plantings (seed_id, structure_id, year, qty_started, qty_planted,
            indoor_start_date, hardening_date, transplant_date, direct_sow_date,
            first_harvest_date, status, notes)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (data.seed_id, data.structure_id, data.year, data.quantity,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (data.seed_id, data.structure_id, data.year, data.qty_started, data.qty_planted,
          data.indoor_start_date, data.hardening_date, data.transplant_date,
          data.direct_sow_date, data.first_harvest_date, data.status, data.notes)
     )
@@ -325,11 +344,11 @@ def duplicate_planting(planting_id: int):
         raise HTTPException(404, "Planting not found")
     o = dict(original)
     cursor = conn.execute(
-        """INSERT INTO plantings (seed_id, structure_id, year, quantity,
+        """INSERT INTO plantings (seed_id, structure_id, year, qty_started, qty_planted,
            indoor_start_date, hardening_date, transplant_date, direct_sow_date,
            first_harvest_date, status, notes)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (o["seed_id"], None, o["year"], o["quantity"],
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (o["seed_id"], None, o["year"], o.get("qty_started"), o.get("qty_planted"),
          o["indoor_start_date"], o["hardening_date"], o["transplant_date"],
          o["direct_sow_date"], o["first_harvest_date"], o["status"],
          o["notes"])
