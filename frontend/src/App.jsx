@@ -184,6 +184,7 @@ export default function App() {
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const [plantingPhotos, setPlantingPhotos] = useState([]);
   const [mapHighlight, setMapHighlight] = useState(null);
+  const [showMapThumbs, setShowMapThumbs] = useState(false);
   const [selectedBed, setSelectedBed] = useState(null);
   const [gridCells, setGridCells] = useState([]);
   const [activePaintPlanting, setActivePaintPlanting] = useState(null);
@@ -387,13 +388,43 @@ export default function App() {
     const W = 680, H = 880;
     const PX_PER_FT = 26;
 
+    // Neutral palette
+    const MAP_BG = '#7a9470';          // muted sage — garden ground
+    const MAP_PATIO = '#c8b89a';       // warm stone
+    const EMPTY_BED = '#c4b49a';       // warm tan — bare soil
+    const EMPTY_BOX = '#b8a890';       // slightly cooler tan
+    const FENCE = '#2a2420';
+
     return (
       <div className="garden-map">
         <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg">
-          <rect x="20" y="20" width="640" height="840" fill="#4a7c4f" rx="8"/>
-          <rect x="20" y="20" width="640" height="100" fill="#c4a97d" opacity="0.35" rx="8"/>
-          <rect x="640" y="120" width="20" height="740" fill="#1a1a1a" opacity="0.7"/>
-          <rect x="20" y="200" width="30" height="400" fill="#8B6F47" opacity="0.3" rx="4"/>
+          <defs>
+            {showMapThumbs && structures.map(s => {
+              const planted = plantingsByStructure[s.id];
+              if (!planted) return null;
+              const imageUrl = seeds.find(sd => sd.id === planted[0].seed_id)?.image_url;
+              if (!imageUrl) return null;
+              const tileSize = s.type === 'box' ? 14 : 18;
+              return [
+                <clipPath key={`bedclip-${s.id}`} id={`bedclip-${s.id}`}>
+                  <rect x={s.map_x} y={s.map_y} width={s.width * PX_PER_FT} height={s.length * PX_PER_FT} rx={s.type === 'box' ? 3 : 4}/>
+                </clipPath>,
+                <pattern key={`pat-${s.id}`} id={`pat-${s.id}`} patternUnits="userSpaceOnUse"
+                  x={s.map_x} y={s.map_y} width={tileSize} height={tileSize}>
+                  <image href={imageUrl} x="0" y="0" width={tileSize} height={tileSize} preserveAspectRatio="xMidYMid slice"/>
+                </pattern>
+              ];
+            })}
+          </defs>
+
+          {/* Garden ground */}
+          <rect x="20" y="20" width="640" height="840" fill={MAP_BG} rx="8"/>
+          {/* Patio / top deck */}
+          <rect x="20" y="20" width="640" height="100" fill={MAP_PATIO} opacity="0.6" rx="8"/>
+          {/* Right fence */}
+          <rect x="640" y="120" width="20" height="740" fill={FENCE} opacity="0.8"/>
+          {/* Left path strip */}
+          <rect x="20" y="200" width="30" height="400" fill="#6a5a3a" opacity="0.2" rx="4"/>
 
           {structures.map(s => {
             const x = s.map_x;
@@ -414,71 +445,97 @@ export default function App() {
             const isProjected = !plantedHere && projectedHere.length > 0;
 
             let fillColor, opacity;
-            if (plantedHere) { fillColor = catColor(plantedHere[0].category); opacity = 0.9; }
-            else if (isProjected) { fillColor = catColor(projectedHere[0].category); opacity = 0.45; }
-            else if (isStrip) { fillColor = '#5a3e1b'; opacity = 0.5; }
-            else if (isBed) { fillColor = '#8B7355'; opacity = 0.7; }
-            else { fillColor = '#6B5B3E'; opacity = 0.6; }
+            if (plantedHere) { fillColor = catColor(plantedHere[0].category); opacity = 0.88; }
+            else if (isProjected) { fillColor = catColor(projectedHere[0].category); opacity = 0.38; }
+            else if (isStrip) { fillColor = '#7a6040'; opacity = 0.55; }
+            else if (isBed) { fillColor = EMPTY_BED; opacity = 1; }
+            else { fillColor = EMPTY_BOX; opacity = 1; }
 
             const isVertical = s.id === 'bed-7' || isStrip;
+            const rx = isStrip ? 2 : (isBox ? 3 : 4);
+            const stroke = isHighlighted ? '#e8c56d' : isProjected ? '#e8c56d' : (isStrip ? '#6a5030' : '#8a7060');
+            const strokeWidth = isHighlighted ? 3 : isProjected ? 1.5 : 1;
+            const strokeDash = isProjected ? '5 3' : 'none';
+
+            const hasThumb = showMapThumbs && plantedHere &&
+              seeds.find(sd => sd.id === plantedHere[0].seed_id)?.image_url;
+
+            // Label text color: dark on light empty beds, white on colored/thumb beds
+            const labelColor = plantedHere || isProjected ? '#fff' : '#5a4a36';
+            const plantLabelColor = isProjected ? 'rgba(232,197,109,0.85)' : '#fff';
 
             return (
               <g key={s.id} className="map-bed" onClick={() => {
                 const structObj = structures.find(st => st.id === s.id);
                 if (structObj) openBedPlanner(structObj);
               }}>
+                {/* Base fill */}
                 <rect x={x} y={y} width={w} height={h}
-                  fill={fillColor}
-                  stroke={isHighlighted ? '#e8c56d' : isProjected ? '#e8c56d' : (isStrip ? '#4a3215' : '#5a4a2e')}
-                  strokeWidth={isHighlighted ? 3 : isProjected ? 2 : (isStrip ? 0.5 : 1)}
-                  strokeDasharray={isProjected ? '6 3' : isStrip ? '4 3' : 'none'}
-                  rx={isStrip ? 2 : (isBox ? 3 : 4)}
-                  opacity={opacity}
+                  fill={hasThumb ? `url(#pat-${s.id})` : fillColor}
+                  clipPath={hasThumb ? `url(#bedclip-${s.id})` : undefined}
+                  stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDash}
+                  rx={rx} opacity={hasThumb ? 0.9 : opacity}
                 />
+                {/* Category color overlay on top of thumbnail pattern */}
+                {hasThumb && (
+                  <rect x={x} y={y} width={w} height={h}
+                    fill={fillColor} opacity={0.38} rx={rx}
+                    stroke={stroke} strokeWidth={strokeWidth}
+                  />
+                )}
+                {/* Raised bed corner brackets */}
                 {isBed && <>
-                  <rect x={x-2} y={y-2} width={8} height={8} fill="#5a4a2e" rx={2}/>
-                  <rect x={x+w-6} y={y-2} width={8} height={8} fill="#5a4a2e" rx={2}/>
-                  <rect x={x-2} y={y+h-6} width={8} height={8} fill="#5a4a2e" rx={2}/>
-                  <rect x={x+w-6} y={y+h-6} width={8} height={8} fill="#5a4a2e" rx={2}/>
+                  <rect x={x-2} y={y-2} width={7} height={7} fill="#8a7060" rx={1.5}/>
+                  <rect x={x+w-5} y={y-2} width={7} height={7} fill="#8a7060" rx={1.5}/>
+                  <rect x={x-2} y={y+h-5} width={7} height={7} fill="#8a7060" rx={1.5}/>
+                  <rect x={x+w-5} y={y+h-5} width={7} height={7} fill="#8a7060" rx={1.5}/>
                 </>}
+
+                {/* Labels: name OUTSIDE (above rect), plants inside/below */}
                 {isVertical ? (
+                  /* Vertical beds: rotated label inside */
                   <text x={x + w/2} y={y + h/2} textAnchor="middle" dominantBaseline="middle"
-                    fill="#fff" fontSize={isStrip ? 10 : 12} fontWeight="500" fontFamily="DM Sans"
+                    fill="#fff" fontSize={isStrip ? 9 : 11} fontWeight="600" fontFamily="DM Sans"
                     transform={`rotate(-90,${x + w/2},${y + h/2})`}>
-                    {isStrip ? `Planting Strip ${s.width}x${s.length}` : `${s.name} ${s.width}x${s.length}`}
+                    {isStrip ? `Strip ${s.width}x${s.length}` : `${s.name}`}
                   </text>
                 ) : (
                   <>
-                    <text x={x + w/2} y={y + h/2 - (plantedHere ? 6 : 0)} textAnchor="middle" dominantBaseline="middle"
-                      fill="#fff" fontSize={isBox ? 9 : 13} fontWeight="500" fontFamily="DM Sans">
+                    {/* Bed/box name — above the rect */}
+                    <text x={x + w/2} y={y - 3} textAnchor="middle" dominantBaseline="auto"
+                      fill="#f0ece4" fontSize={isBox ? 8 : 11} fontWeight="700" fontFamily="DM Sans"
+                      style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
                       {s.name}
                     </text>
-                    {!isBox && (
-                      <text x={x + w/2} y={y + h/2 + 12} textAnchor="middle" dominantBaseline="middle"
-                        fill="rgba(255,255,255,0.6)" fontSize={9} fontFamily="DM Sans">
+                    {/* Size label — small, inside top of rect */}
+                    {!isBox && !hasThumb && (
+                      <text x={x + w/2} y={y + 11} textAnchor="middle" dominantBaseline="middle"
+                        fill="rgba(255,255,255,0.5)" fontSize={8} fontFamily="DM Sans">
                         {s.width}x{s.length}
                       </text>
                     )}
+                    {/* Plant varieties — inside rect center */}
+                    {(plantedHere || isProjected) && (
+                      <text x={x + w/2} y={y + h/2} textAnchor="middle" dominantBaseline="middle"
+                        fill={plantLabelColor} fontSize={isBox ? 7 : 9} fontWeight="600" fontFamily="DM Sans">
+                        {isProjected
+                          ? `⟳ ${projectedHere.map(pp => pp.seed_name).join(', ').substring(0, 18)}`
+                          : plantedHere.map(pp => pp.seed_name).join(', ').substring(0, 22)
+                        }
+                      </text>
+                    )}
                   </>
-                )}
-                {(plantedHere || isProjected) && !isVertical && (
-                  <text x={x + w/2} y={y + h/2 + (isBox ? 10 : 24)} textAnchor="middle" dominantBaseline="middle"
-                    fill={isProjected ? 'rgba(232,197,109,0.7)' : '#e8c56d'} fontSize={isBox ? 7 : 9} fontWeight="500" fontFamily="DM Sans">
-                    {isProjected
-                      ? `(proj.) ${projectedHere.map(pp => pp.seed_name).join(', ').substring(0, 16)}`
-                      : plantedHere.map(pp => pp.seed_name).join(', ').substring(0, 20)
-                    }
-                  </text>
                 )}
               </g>
             );
           })}
 
-          <rect x={10} y={H-60} width={W-20} height={50} fill="rgba(0,0,0,0.3)" rx={8}/>
+          {/* Legend */}
+          <rect x={10} y={H-55} width={W-20} height={44} fill="rgba(20,16,12,0.55)" rx={8}/>
           {Object.entries(CATEGORY_COLORS).map(([cat, color], i) => (
             <g key={cat}>
-              <rect x={20 + i * 72} y={H-45} width={10} height={10} fill={color} rx={2}/>
-              <text x={34 + i * 72} y={H-36} fill="#fff" fontSize={8} fontFamily="DM Sans">{cat}</text>
+              <rect x={20 + i * 72} y={H-42} width={9} height={9} fill={color} rx={2}/>
+              <text x={33 + i * 72} y={H-34} fill="rgba(255,255,255,0.8)" fontSize={7.5} fontFamily="DM Sans">{cat}</text>
             </g>
           ))}
         </svg>
@@ -939,6 +996,8 @@ export default function App() {
         _seedLot: seed.lot || '',
         _seedSku: seed.sku || '',
         _seedSpacing: seed.spacing_inches || 12,
+        _seedImageUrl: seed.image_url || '',
+        _seedImageLoading: false,
       });
       setShowModal('edit-seed');
     };
@@ -959,6 +1018,7 @@ export default function App() {
         germ_rate: editData._seedGermRate ? parseFloat(editData._seedGermRate) : null,
         lot: editData._seedLot || null,
         sku: editData._seedSku || null,
+        image_url: editData._seedImageUrl || null,
       });
       setShowModal(null);
       setEditData({});
@@ -1072,6 +1132,29 @@ export default function App() {
                 <label className="form-label">Plant Spacing (inches)</label>
                 <input type="number" className="form-input" value={editData._seedSpacing || ''} onChange={e => setEditData(d => ({ ...d, _seedSpacing: parseInt(e.target.value) || 12 }))} placeholder="12" />
                 <div style={{ fontSize: 11, color: '#8a8580', marginTop: 4 }}>Used in the bed planner grid. Common values: 3" carrots/radish, 6" lettuce/onions, 12" herbs/cucumbers, 18" peppers/kale, 24" tomatoes</div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Plant Photo</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {editData._seedImageUrl ? (
+                    <img src={editData._seedImageUrl} alt={editData._seedName} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid #e8e4dd', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />
+                  ) : (
+                    <div style={{ width: 64, height: 64, borderRadius: 8, border: '2px dashed #e8e4dd', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#ccc', flexShrink: 0 }}>🌿</div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <button className="btn btn-secondary btn-sm" disabled={editData._seedImageLoading} onClick={async () => {
+                      setEditData(d => ({ ...d, _seedImageLoading: true }));
+                      const res = await api.get(`/api/seeds/image-search?q=${encodeURIComponent(editData._seedName || '')}`);
+                      setEditData(d => ({ ...d, _seedImageUrl: res.image_url || d._seedImageUrl, _seedImageLoading: false }));
+                    }}>
+                      {editData._seedImageLoading ? 'Searching...' : '🔍 Find Image'}
+                    </button>
+                    {editData._seedImageUrl && (
+                      <button className="btn btn-sm" style={{ marginLeft: 8, background: 'none', border: 'none', color: '#8a8580', cursor: 'pointer', fontSize: 12 }} onClick={() => setEditData(d => ({ ...d, _seedImageUrl: '' }))}>✕ Remove</button>
+                    )}
+                    <div style={{ fontSize: 11, color: '#8a8580', marginTop: 4 }}>Auto-fetched from Wikipedia. Shown in bed planner grid.</div>
+                  </div>
+                </div>
               </div>
               <div className="modal-actions">
                 <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancel</button>
@@ -1293,8 +1376,19 @@ export default function App() {
 
   const renderGardenMapView = () => (
     <div>
-      <h1 className="page-title">Garden Map</h1>
-      <p className="page-sub">Click any bed or box to open the planner</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
+        <div>
+          <h1 className="page-title">Garden Map</h1>
+          <p className="page-sub" style={{ marginBottom: 0 }}>Click any bed or box to open the planner</p>
+        </div>
+        <button
+          className="btn btn-secondary"
+          style={{ marginBottom: 24, background: showMapThumbs ? '#2d2a24' : undefined, color: showMapThumbs ? '#e8c56d' : undefined }}
+          onClick={() => setShowMapThumbs(v => !v)}
+        >
+          {showMapThumbs ? '🖼️ Thumbnails On' : '🎨 Show Thumbnails'}
+        </button>
+      </div>
       <div className="grid-2">
         <div>{renderGardenMap()}</div>
         <div className="card">
@@ -1408,52 +1502,98 @@ export default function App() {
         <div style={{ display: 'flex', gap: 24 }}>
           {/* Grid */}
           <div>
-            <div style={{ border: '2px solid #5a4a2e', borderRadius: 4, display: 'inline-block', background: '#e8dcc8' }}>
-              {/* Column markers (inches) */}
-              <div style={{ display: 'flex', paddingLeft: 28 }}>
-                {Array.from({ length: cols }).map((_, c) => (
-                  <div key={c} style={{ width: cellPx, textAlign: 'center', fontSize: 8, color: '#8a8580', height: 14, lineHeight: '14px' }}>
-                    {(c * CELL_SIZE) % 12 === 0 ? `${c * CELL_SIZE / 12}ft` : ''}
+            {(() => {
+              // Build image map: planting_id → image_url (via seeds lookup)
+              const plantingImageMap = {};
+              plantings.forEach(p => {
+                const seed = seeds.find(s => s.id === p.seed_id);
+                if (seed?.image_url) plantingImageMap[p.id] = seed.image_url;
+              });
+
+              // Find leftmost cell per (planting, row) for labels — one label per row per planting
+              const rowLabelMap = {};
+              gridCells.forEach(cell => {
+                const key = `${cell.planting_id}-${cell.row}`;
+                if (!rowLabelMap[key] || cell.col < rowLabelMap[key].c) {
+                  rowLabelMap[key] = { r: cell.row, c: cell.col, name: cell.seed_name };
+                }
+              });
+              const labelCells = Object.values(rowLabelMap);
+
+              return (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <div style={{ border: '2px solid #5a4a2e', borderRadius: 4, display: 'inline-block', background: '#e8dcc8' }}>
+                    {/* Column markers */}
+                    <div style={{ display: 'flex', paddingLeft: 28 }}>
+                      {Array.from({ length: cols }).map((_, c) => (
+                        <div key={c} style={{ width: cellPx, textAlign: 'center', fontSize: 8, color: '#8a8580', height: 14, lineHeight: '14px' }}>
+                          {(c * CELL_SIZE) % 12 === 0 ? `${c * CELL_SIZE / 12}ft` : ''}
+                        </div>
+                      ))}
+                    </div>
+                    {Array.from({ length: rows }).map((_, r) => (
+                      <div key={r} style={{ display: 'flex' }}>
+                        <div style={{ width: 28, fontSize: 8, color: '#8a8580', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 4 }}>
+                          {(r * CELL_SIZE) % 12 === 0 ? `${r * CELL_SIZE / 12}ft` : ''}
+                        </div>
+                        {Array.from({ length: cols }).map((_, c) => {
+                          const cell = cellMap[`${r}-${c}`];
+                          const isActive = activePaintPlanting && cell && cell.planting_id === activePaintPlanting.id;
+                          const imageUrl = cell ? plantingImageMap[cell.planting_id] : null;
+                          const useThumb = imageUrl && cellPx >= 24;
+                          return (
+                            <div
+                              key={c}
+                              style={{
+                                width: cellPx, height: cellPx,
+                                border: '0.5px solid rgba(90,74,46,0.2)',
+                                background: cell && !useThumb ? catColor(cell.category) : (!cell ? ((r + c) % 2 === 0 ? 'rgba(139,115,85,0.08)' : 'transparent') : 'transparent'),
+                                backgroundImage: useThumb ? `url(${imageUrl})` : 'none',
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center',
+                                opacity: cell ? 0.92 : 1,
+                                cursor: activePaintPlanting ? 'crosshair' : 'default',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                outline: isActive ? '2px solid #e8c56d' : 'none',
+                                transition: 'outline 0.1s',
+                              }}
+                              title={cell ? `${cell.seed_name}` : `Empty`}
+                              onMouseDown={() => { setIsDragging(true); handleCellPaint(r, c); }}
+                              onMouseEnter={() => handleCellDrag(r, c)}
+                              onMouseUp={() => { setIsDragging(false); loadData(); }}
+                            >
+                              {cell && useThumb && (
+                                <div style={{ position: 'absolute', inset: 0, background: catColor(cell.category), opacity: 0.45 }} />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              {Array.from({ length: rows }).map((_, r) => (
-                <div key={r} style={{ display: 'flex' }}>
-                  {/* Row marker */}
-                  <div style={{ width: 28, fontSize: 8, color: '#8a8580', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 4 }}>
-                    {(r * CELL_SIZE) % 12 === 0 ? `${r * CELL_SIZE / 12}ft` : ''}
-                  </div>
-                  {Array.from({ length: cols }).map((_, c) => {
-                    const cell = cellMap[`${r}-${c}`];
-                    const bgColor = cell ? catColor(cell.category) : 'transparent';
-                    const isActive = activePaintPlanting && cell && cell.planting_id === activePaintPlanting.id;
+                  {/* Plant name labels — one per row per planting at leftmost cell */}
+                  {cellPx >= 20 && labelCells.map(({ r, c, name }, i) => {
+                    const TOP_OFFSET = 14; // column marker height
+                    const top = TOP_OFFSET + r * cellPx + 2;
+                    const left = 28 + c * cellPx + 2; // 28px = row gutter
                     return (
-                      <div
-                        key={c}
-                        style={{
-                          width: cellPx, height: cellPx,
-                          border: '0.5px solid rgba(90,74,46,0.2)',
-                          background: cell ? bgColor : ((r + c) % 2 === 0 ? 'rgba(139,115,85,0.08)' : 'transparent'),
-                          opacity: cell ? 0.85 : 1,
-                          cursor: activePaintPlanting ? 'crosshair' : 'default',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          outline: isActive ? '1px solid #e8c56d' : 'none',
-                          transition: 'background 0.1s',
-                        }}
-                        title={cell ? `${cell.seed_name} (${r},${c})` : `Empty (${r},${c})`}
-                        onMouseDown={() => { setIsDragging(true); handleCellPaint(r, c); }}
-                        onMouseEnter={() => handleCellDrag(r, c)}
-                        onMouseUp={() => { setIsDragging(false); loadData(); }}
-                      >
-                        {cell && cellPx >= 20 && (
-                          <div style={{ width: cellPx * 0.5, height: cellPx * 0.5, borderRadius: '50%', background: 'rgba(255,255,255,0.5)' }} />
-                        )}
+                      <div key={`label-${i}`} style={{
+                        position: 'absolute', top, left,
+                        background: 'rgba(20,16,12,0.72)', color: '#fff',
+                        fontSize: 9, fontWeight: 600, letterSpacing: 0.2,
+                        padding: '1px 5px', borderRadius: 4,
+                        pointerEvents: 'none', whiteSpace: 'nowrap',
+                        maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis',
+                        zIndex: 2,
+                      }}>
+                        {name.length > 16 ? name.slice(0, 15) + '…' : name}
                       </div>
                     );
                   })}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
             <div style={{ fontSize: 11, color: '#8a8580', marginTop: 8 }}>
               {activePaintPlanting ? `Painting: ${activePaintPlanting.seed_name}. Click or drag cells to fill. Click filled cells to erase.` : 'Select a planting from the sidebar to start painting.'}
             </div>
@@ -1483,6 +1623,7 @@ export default function App() {
                   const isActive = activePaintPlanting?.id === p.id;
                   const count = cellCounts[p.id] || 0;
                   const seed = seeds.find(s => s.id === p.seed_id);
+                  const imageUrl = seed?.image_url;
                   return (
                     <div key={p.id}
                       style={{
@@ -1493,16 +1634,26 @@ export default function App() {
                       onClick={() => setActivePaintPlanting(isActive ? null : p)}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: catColor(p.category), flexShrink: 0 }} />
-                        <span style={{ fontWeight: 500, fontSize: 13, flex: 1 }}>{p.seed_name}</span>
-                        {count > 0 && <span style={{ fontSize: 10, color: '#8a8580' }}>{count} cells</span>}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#8a8580', marginTop: 2 }}>
-                        Spacing: {seed?.spacing_inches || 12}"
-                        {p.unplaced_count > 0 && <span style={{ color: '#e8a020', marginLeft: 6 }}>{p.unplaced_count} unplaced</span>}
+                        {imageUrl ? (
+                          <div style={{ width: 36, height: 36, borderRadius: 6, overflow: 'hidden', flexShrink: 0, position: 'relative', border: `2px solid ${catColor(p.category)}` }}>
+                            <img src={imageUrl} alt={p.seed_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
+                          </div>
+                        ) : (
+                          <div style={{ width: 36, height: 36, borderRadius: 6, background: catColor(p.category), flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                            🌱
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.seed_name}</div>
+                          <div style={{ fontSize: 11, color: '#8a8580', marginTop: 1 }}>
+                            {seed?.spacing_inches || 12}" spacing
+                            {count > 0 && <span style={{ marginLeft: 6 }}>{count} cells</span>}
+                            {p.unplaced_count > 0 && <span style={{ color: '#e8a020', marginLeft: 6 }}>{p.unplaced_count} unplaced</span>}
+                          </div>
+                        </div>
                       </div>
                       {isActive && count > 0 && (
-                        <button className="btn btn-danger btn-sm" style={{ marginTop: 5, width: '100%' }} onClick={(e) => { e.stopPropagation(); handleClearPlanting(p.id); }}>Clear cells here</button>
+                        <button className="btn btn-danger btn-sm" style={{ marginTop: 6, width: '100%' }} onClick={(e) => { e.stopPropagation(); handleClearPlanting(p.id); }}>Clear cells here</button>
                       )}
                     </div>
                   );
@@ -1686,6 +1837,11 @@ export default function App() {
             </div>
           ))}
           <div className="nav-right">
+            <button className="nav-btn" onClick={async () => {
+              const res = await api.post('/api/seeds/fetch-images', {});
+              alert(`Fetched images for ${res.updated} of ${res.total} plants.`);
+              loadData();
+            }}>🌿 Fetch Plant Images</button>
             <button className="nav-btn" onClick={handleExport}>Export JSON</button>
             <button className="nav-btn" onClick={handleImport}>Import</button>
           </div>

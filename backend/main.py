@@ -2,6 +2,8 @@ import os
 import json
 import uuid
 import shutil
+import urllib.request
+import urllib.parse
 from datetime import datetime
 from typing import Optional, List
 
@@ -146,12 +148,15 @@ init_db()
 def migrate_db():
     """Add new columns to existing databases without losing data."""
     conn = get_db()
-    existing = [row[1] for row in conn.execute("PRAGMA table_info(plantings)").fetchall()]
-    if "qty_started" not in existing:
+    planting_cols = [row[1] for row in conn.execute("PRAGMA table_info(plantings)").fetchall()]
+    if "qty_started" not in planting_cols:
         conn.execute("ALTER TABLE plantings ADD COLUMN qty_started INTEGER")
         conn.execute("UPDATE plantings SET qty_started = quantity WHERE quantity IS NOT NULL")
-    if "qty_planted" not in existing:
+    if "qty_planted" not in planting_cols:
         conn.execute("ALTER TABLE plantings ADD COLUMN qty_planted INTEGER")
+    seed_cols = [row[1] for row in conn.execute("PRAGMA table_info(seeds)").fetchall()]
+    if "image_url" not in seed_cols:
+        conn.execute("ALTER TABLE seeds ADD COLUMN image_url TEXT")
     conn.commit()
     conn.close()
 
@@ -212,6 +217,7 @@ class SeedCreate(BaseModel):
     direct_sow: bool = False
     suggested_indoor_weeks: int = 0
     spacing_inches: int = 12
+    image_url: Optional[str] = None
 
 
 # ── API Routes ────────────────────────────────────────────────────────────────
@@ -238,12 +244,12 @@ def create_seed(data: SeedCreate):
     conn.execute(
         """INSERT INTO seeds (id, name, variety, category, species, days_to_maturity,
            germ_rate, lot, sku, organic, supplier, min_seeds, start_indoors, direct_sow,
-           suggested_indoor_weeks, spacing_inches) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           suggested_indoor_weeks, spacing_inches, image_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (seed_id, data.name, data.variety or data.name, data.category, data.species,
          data.days_to_maturity, data.germ_rate, data.lot, data.sku,
          1 if data.organic else 0, data.supplier, data.min_seeds,
          1 if data.start_indoors else 0, 1 if data.direct_sow else 0,
-         data.suggested_indoor_weeks, data.spacing_inches)
+         data.suggested_indoor_weeks, data.spacing_inches, data.image_url)
     )
     conn.commit()
     conn.close()
@@ -260,17 +266,75 @@ def update_seed(seed_id: str, data: SeedCreate):
     conn.execute(
         """UPDATE seeds SET name=?, variety=?, category=?, species=?, days_to_maturity=?,
            germ_rate=?, lot=?, sku=?, organic=?, supplier=?, min_seeds=?,
-           start_indoors=?, direct_sow=?, suggested_indoor_weeks=?, spacing_inches=?
+           start_indoors=?, direct_sow=?, suggested_indoor_weeks=?, spacing_inches=?, image_url=?
            WHERE id=?""",
         (data.name, data.variety or data.name, data.category, data.species,
          data.days_to_maturity, data.germ_rate, data.lot, data.sku,
          1 if data.organic else 0, data.supplier, data.min_seeds,
          1 if data.start_indoors else 0, 1 if data.direct_sow else 0,
-         data.suggested_indoor_weeks, data.spacing_inches, seed_id)
+         data.suggested_indoor_weeks, data.spacing_inches, data.image_url, seed_id)
     )
     conn.commit()
     conn.close()
     return {"message": "Seed updated"}
+
+
+def _wikipedia_image(query: str) -> Optional[str]:
+    """Fetch a thumbnail URL from Wikipedia for the given search query."""
+    try:
+        encoded = urllib.parse.quote(query)
+        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Heirloom/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            thumb = data.get("thumbnail", {})
+            src = thumb.get("source")
+            if src:
+                # Request a larger size (300px wide)
+                src = src.replace("/320px-", "/300px-").replace("/220px-", "/300px-")
+                return src
+    except Exception:
+        pass
+    return None
+
+
+@app.get("/api/seeds/image-search")
+def seed_image_search(q: str):
+    """Search Wikipedia for a plant thumbnail image."""
+    # Try exact query, then strip trailing words like "OG", "F1"
+    url = _wikipedia_image(q)
+    if not url:
+        # Strip common suffixes and try again
+        simplified = q.replace(" OG", "").replace(" F1", "").replace(" Mix", "").strip()
+        if simplified != q:
+            url = _wikipedia_image(simplified)
+    return {"image_url": url}
+
+
+@app.post("/api/seeds/fetch-images")
+def fetch_all_images():
+    """Bulk-fetch Wikipedia thumbnails for all seeds missing an image_url."""
+    conn = get_db()
+    seeds = conn.execute("SELECT id, name, variety, category FROM seeds WHERE image_url IS NULL OR image_url = ''").fetchall()
+    updated = 0
+    CATEGORY_FALLBACKS = {
+        "Tomatoes": "Tomato", "Peppers": "Capsicum", "Herbs": "Herb",
+        "Greens": "Leaf vegetable", "Beans": "Bean", "Brassicas": "Brassica",
+        "Alliums": "Allium", "Cucurbits": "Cucurbit", "Root Vegetables": "Root vegetable",
+    }
+    for seed in seeds:
+        url = _wikipedia_image(seed["name"])
+        if not url and seed["variety"] and seed["variety"] != seed["name"]:
+            url = _wikipedia_image(seed["variety"])
+        if not url:
+            fallback = CATEGORY_FALLBACKS.get(seed["category"], seed["category"])
+            url = _wikipedia_image(fallback)
+        if url:
+            conn.execute("UPDATE seeds SET image_url = ? WHERE id = ?", (url, seed["id"]))
+            updated += 1
+    conn.commit()
+    conn.close()
+    return {"updated": updated, "total": len(seeds)}
 
 
 @app.get("/api/structures")
