@@ -326,12 +326,15 @@ export default function App() {
   // ── Computed ──────────────────────────────────────────────────────────────
 
   const categories = [...new Set(seeds.map(s => s.category))].sort();
+  // Build structure → plantings map from grid cells (a planting can span multiple beds)
   const plantingsByStructure = {};
   plantings.forEach(p => {
-    if (p.structure_id) {
-      if (!plantingsByStructure[p.structure_id]) plantingsByStructure[p.structure_id] = [];
-      plantingsByStructure[p.structure_id].push(p);
-    }
+    (p.grid_structures || []).forEach(sid => {
+      if (!plantingsByStructure[sid]) plantingsByStructure[sid] = [];
+      if (!plantingsByStructure[sid].find(x => x.id === p.id)) {
+        plantingsByStructure[sid].push(p);
+      }
+    });
   });
 
   const totalStarted = plantings.reduce((sum, p) => sum + (p.qty_started || 0), 0);
@@ -894,8 +897,8 @@ export default function App() {
                 <span className="badge badge-category" style={{ background: catColor(p.category) }}>{p.category}</span>
                 <span style={{ fontSize: 12, color: '#8a8580', whiteSpace: 'nowrap' }}>
                   {p.qty_started ? `${p.qty_started} started` : ''}
-                  {p.qty_started && p.qty_planted ? ' → ' : ''}
-                  {p.qty_planted ? `${p.qty_planted} planted` : ''}
+                  {p.placed_count > 0 ? ` · ${p.placed_count} placed` : ''}
+                  {p.unplaced_count > 0 ? <span style={{ color: '#e8a020' }}> · {p.unplaced_count} unassigned</span> : ''}
                 </span>
                 <span style={{ fontSize: 12, color: '#8a8580' }}>{p.structure_name || 'Unassigned'}</span>
               </div>
@@ -1184,7 +1187,27 @@ export default function App() {
                   <span style={{ fontWeight: 500 }}>{p.seed_name}</span>
                   {p.organic ? <span className="badge badge-organic" style={{ marginLeft: 8 }}>OG</span> : null}
                 </td>
-                <td>{p.structure_name || <span style={{ color: '#ccc' }}>—</span>}</td>
+                <td>
+                  {(() => {
+                    const bedNames = (p.grid_structures || [])
+                      .map(sid => structures.find(s => s.id === sid)?.name || sid)
+                      .filter(Boolean);
+                    return (
+                      <div>
+                        <div style={{ fontSize: 13 }}>
+                          {bedNames.length > 0 ? bedNames.join(', ') : <span style={{ color: '#ccc' }}>—</span>}
+                        </div>
+                        {(p.placed_count > 0 || p.unplaced_count > 0) && (
+                          <div style={{ fontSize: 11, marginTop: 2 }}>
+                            {p.placed_count > 0 && <span style={{ color: '#16a34a' }}>{p.placed_count} placed</span>}
+                            {p.placed_count > 0 && p.unplaced_count > 0 && <span style={{ color: '#ccc' }}> · </span>}
+                            {p.unplaced_count > 0 && <span style={{ color: '#e8a020' }}>{p.unplaced_count} unassigned</span>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </td>
                 <td onClick={e => e.stopPropagation()}>
                   <input
                     type="number" min="0"
@@ -1448,14 +1471,13 @@ export default function App() {
                 <div style={{ color: '#8a8580', fontSize: 13, padding: '12px 0' }}>No plantings yet. Create one to get started.</div>
               )}
               {(() => {
-                const inThisBed = plantings.filter(p => p.structure_id === bed.id);
-                const others = plantings.filter(p => p.structure_id !== bed.id);
-                const grouped = others.reduce((acc, p) => {
-                  const key = p.structure_id ? (structures.find(s => s.id === p.structure_id)?.name || p.structure_id) : 'Unassigned';
-                  if (!acc[key]) acc[key] = [];
-                  acc[key].push(p);
-                  return acc;
-                }, {});
+                const inThisBed = plantings.filter(p => (p.grid_structures || []).includes(bed.id));
+                const notInThisBed = plantings.filter(p => !(p.grid_structures || []).includes(bed.id));
+                // Unassigned = has plants not yet placed anywhere (unplaced_count > 0)
+                const unassigned = notInThisBed.filter(p => (p.unplaced_count || 0) > 0);
+                // Other beds = not here, fully placed elsewhere
+                const otherBeds = notInThisBed.filter(p => (p.unplaced_count || 0) === 0 && (p.grid_structures || []).length > 0);
+                const grouped = { unassigned, otherBeds };
 
                 const renderPaintable = (p) => {
                   const isActive = activePaintPlanting?.id === p.id;
@@ -1477,6 +1499,7 @@ export default function App() {
                       </div>
                       <div style={{ fontSize: 11, color: '#8a8580', marginTop: 2 }}>
                         Spacing: {seed?.spacing_inches || 12}"
+                        {p.unplaced_count > 0 && <span style={{ color: '#e8a020', marginLeft: 6 }}>{p.unplaced_count} unplaced</span>}
                       </div>
                       {isActive && count > 0 && (
                         <button className="btn btn-danger btn-sm" style={{ marginTop: 5, width: '100%' }} onClick={(e) => { e.stopPropagation(); handleClearPlanting(p.id); }}>Clear cells here</button>
@@ -1493,12 +1516,18 @@ export default function App() {
                         {inThisBed.map(renderPaintable)}
                       </>
                     )}
-                    {Object.entries(grouped).map(([groupName, groupPlantings]) => (
-                      <div key={groupName}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: '#8a8580', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '8px 0 6px' }}>{groupName}</div>
-                        {groupPlantings.map(renderPaintable)}
+                    {grouped.unassigned.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#e8a020', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '8px 0 6px' }}>Unassigned</div>
+                        {grouped.unassigned.map(renderPaintable)}
                       </div>
-                    ))}
+                    )}
+                    {grouped.otherBeds.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#8a8580', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '8px 0 6px' }}>Other Beds</div>
+                        {grouped.otherBeds.map(renderPaintable)}
+                      </div>
+                    )}
                   </>
                 );
               })()}

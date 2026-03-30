@@ -293,20 +293,37 @@ def list_plantings(year: int = 2026):
         WHERE p.year = ?
         ORDER BY p.created_at
     """, (year,)).fetchall()
+
+    # Build grid cell summary: per planting, which structures and how many cells total
+    grid_rows = conn.execute("""
+        SELECT planting_id, structure_id, COUNT(*) as cells
+        FROM grid_cells GROUP BY planting_id, structure_id
+    """).fetchall()
+    grid_by_planting = {}
+    for gr in grid_rows:
+        pid = gr["planting_id"]
+        if pid not in grid_by_planting:
+            grid_by_planting[pid] = {"structures": [], "total": 0}
+        grid_by_planting[pid]["structures"].append(gr["structure_id"])
+        grid_by_planting[pid]["total"] += gr["cells"]
+
     result = []
     for r in rows:
         d = dict(r)
-        # Fetch events
         events = conn.execute(
             "SELECT * FROM planting_events WHERE planting_id = ? ORDER BY event_date",
             (d["id"],)
         ).fetchall()
         d["events"] = [dict(e) for e in events]
-        # Fetch photo count
         photo_count = conn.execute(
             "SELECT COUNT(*) FROM photos WHERE planting_id = ?", (d["id"],)
         ).fetchone()[0]
         d["photo_count"] = photo_count
+        grid_info = grid_by_planting.get(d["id"], {"structures": [], "total": 0})
+        d["grid_structures"] = grid_info["structures"]   # beds/boxes where cells exist
+        d["grid_cells_total"] = grid_info["total"]       # total plants physically placed
+        d["placed_count"] = grid_info["total"]
+        d["unplaced_count"] = max(0, (d.get("qty_started") or 0) - grid_info["total"])
         result.append(d)
     conn.close()
     return result
