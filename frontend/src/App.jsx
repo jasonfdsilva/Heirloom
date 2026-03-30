@@ -394,8 +394,16 @@ export default function App() {
             const plantedHere = plantingsByStructure[s.id];
             const isHighlighted = mapHighlight === s.id;
 
+            const today = new Date();
+            const projectedHere = plantings.filter(p =>
+              p.structure_id === s.id && p.qty_planted &&
+              p.transplant_date && new Date(p.transplant_date + 'T00:00:00') > today
+            );
+            const isProjected = !plantedHere && projectedHere.length > 0;
+
             let fillColor, opacity;
             if (plantedHere) { fillColor = catColor(plantedHere[0].category); opacity = 0.9; }
+            else if (isProjected) { fillColor = catColor(projectedHere[0].category); opacity = 0.45; }
             else if (isStrip) { fillColor = '#5a3e1b'; opacity = 0.5; }
             else if (isBed) { fillColor = '#8B7355'; opacity = 0.7; }
             else { fillColor = '#6B5B3E'; opacity = 0.6; }
@@ -409,9 +417,9 @@ export default function App() {
               }}>
                 <rect x={x} y={y} width={w} height={h}
                   fill={fillColor}
-                  stroke={isHighlighted ? '#e8c56d' : (isStrip ? '#4a3215' : '#5a4a2e')}
-                  strokeWidth={isHighlighted ? 3 : (isStrip ? 0.5 : 1)}
-                  strokeDasharray={isStrip ? '4 3' : 'none'}
+                  stroke={isHighlighted ? '#e8c56d' : isProjected ? '#e8c56d' : (isStrip ? '#4a3215' : '#5a4a2e')}
+                  strokeWidth={isHighlighted ? 3 : isProjected ? 2 : (isStrip ? 0.5 : 1)}
+                  strokeDasharray={isProjected ? '6 3' : isStrip ? '4 3' : 'none'}
                   rx={isStrip ? 2 : (isBox ? 3 : 4)}
                   opacity={opacity}
                 />
@@ -441,10 +449,13 @@ export default function App() {
                     )}
                   </>
                 )}
-                {plantedHere && !isVertical && (
+                {(plantedHere || isProjected) && !isVertical && (
                   <text x={x + w/2} y={y + h/2 + (isBox ? 10 : 24)} textAnchor="middle" dominantBaseline="middle"
-                    fill="#e8c56d" fontSize={isBox ? 7 : 9} fontWeight="500" fontFamily="DM Sans">
-                    {plantedHere.map(pp => pp.seed_name).join(', ').substring(0, 20)}
+                    fill={isProjected ? 'rgba(232,197,109,0.7)' : '#e8c56d'} fontSize={isBox ? 7 : 9} fontWeight="500" fontFamily="DM Sans">
+                    {isProjected
+                      ? `(proj.) ${projectedHere.map(pp => pp.seed_name).join(', ').substring(0, 16)}`
+                      : plantedHere.map(pp => pp.seed_name).join(', ').substring(0, 20)
+                    }
                   </text>
                 )}
               </g>
@@ -507,9 +518,16 @@ export default function App() {
               }
               if (p.transplant_date || p.direct_sow_date) {
                 const startDate = p.transplant_date || p.direct_sow_date;
+                const isOutdoorProjected = new Date(startDate + 'T00:00:00') > new Date();
                 const start = dateToPercent(startDate);
                 const end = dateToPercent(p.first_harvest_date || startDate);
-                if (start !== null) bars.push({ left: start, width: Math.max(end - start, 2), color: catColor(p.category), label: 'Growing' });
+                if (start !== null) bars.push({
+                  left: start,
+                  width: Math.max(end - start, 2),
+                  color: catColor(p.category),
+                  label: isOutdoorProjected ? 'Growing (projected)' : 'Growing',
+                  projected: isOutdoorProjected,
+                });
               }
 
               return (
@@ -523,7 +541,14 @@ export default function App() {
                       <div key={m} className="cal-month" />
                     ))}
                     {bars.map((bar, i) => (
-                      <div key={i} className="cal-bar" style={{ left: bar.left + '%', width: bar.width + '%', background: bar.color }} title={bar.label} />
+                      <div key={i} className="cal-bar" style={{
+                        left: bar.left + '%',
+                        width: bar.width + '%',
+                        background: bar.projected
+                          ? `repeating-linear-gradient(90deg, ${bar.color} 0px, ${bar.color} 6px, transparent 6px, transparent 10px)`
+                          : bar.color,
+                        opacity: bar.projected ? 0.6 : 1,
+                      }} title={bar.label} />
                     ))}
                   </div>
                 </div>
@@ -1145,6 +1170,9 @@ export default function App() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
           <span style={{ width: 12, height: 12, borderRadius: 3, background: '#16a34a', display: 'inline-block' }}></span> Growing/Outdoor
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+          <span style={{ width: 24, height: 12, borderRadius: 3, background: 'repeating-linear-gradient(90deg,#16a34a 0px,#16a34a 6px,transparent 6px,transparent 10px)', opacity: 0.6, display: 'inline-block' }}></span> Projected outdoor
         </div>
       </div>
       {renderCalendar()}
