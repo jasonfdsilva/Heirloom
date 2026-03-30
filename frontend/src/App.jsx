@@ -324,8 +324,10 @@ export default function App() {
     }
   });
 
+  const totalPlants = plantings.reduce((sum, p) => sum + (p.quantity || 1), 0);
   const activePlantings = plantings.filter(p => p.status !== 'done');
-  const harvestingCount = plantings.filter(p => p.status === 'harvesting').length;
+  const activePlantCount = activePlantings.reduce((sum, p) => sum + (p.quantity || 1), 0);
+  const harvestingCount = plantings.filter(p => p.status === 'harvesting').reduce((sum, p) => sum + (p.quantity || 1), 0);
 
   // ── Suggested dates (Zone 6b, last frost April 15) ────────────────────────
 
@@ -815,11 +817,11 @@ export default function App() {
           <div className="stat-label">Seed Varieties</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{plantings.length}</div>
-          <div className="stat-label">Plantings</div>
+          <div className="stat-value">{totalPlants}</div>
+          <div className="stat-label">Total Plants</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{activePlantings.length}</div>
+          <div className="stat-value">{activePlantCount}</div>
           <div className="stat-label">Active</div>
         </div>
         <div className="stat-card">
@@ -840,6 +842,7 @@ export default function App() {
                 <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: statusColor(p.status) }}></span>
                 <span style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{p.seed_name}</span>
                 <span className="badge badge-category" style={{ background: catColor(p.category) }}>{p.category}</span>
+                <span style={{ fontSize: 12, color: '#8a8580', minWidth: 24, textAlign: 'right' }}>×{p.quantity || 1}</span>
                 <span style={{ fontSize: 12, color: '#8a8580' }}>{p.structure_name || 'Unassigned'}</span>
               </div>
             ))}
@@ -1039,6 +1042,7 @@ export default function App() {
             <tr>
               <th>Variety</th>
               <th>Location</th>
+              <th>Qty</th>
               <th>Status</th>
               <th>Started</th>
               <th>Transplant</th>
@@ -1055,6 +1059,19 @@ export default function App() {
                   {p.organic ? <span className="badge badge-organic" style={{ marginLeft: 8 }}>OG</span> : null}
                 </td>
                 <td>{p.structure_name || <span style={{ color: '#ccc' }}>—</span>}</td>
+                <td onClick={e => e.stopPropagation()}>
+                  <input
+                    type="number"
+                    min="0"
+                    value={p.quantity ?? 1}
+                    onChange={async e => {
+                      const qty = parseInt(e.target.value) || 0;
+                      await api.put(`/api/plantings/${p.id}`, { quantity: qty });
+                      loadData();
+                    }}
+                    style={{ width: 52, padding: '2px 6px', border: '1px solid #e8e4dd', borderRadius: 6, fontSize: 13, textAlign: 'center' }}
+                  />
+                </td>
                 <td>
                   <span className="status-dot" style={{ background: statusColor(p.status) }}></span>
                   <span style={{ fontSize: 13 }}>{STATUS_LABELS[p.status] || p.status}</span>
