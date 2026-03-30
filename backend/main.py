@@ -456,14 +456,9 @@ def update_grid(structure_id: str, data: GridUpdate):
             )
         except Exception:
             pass
-    # Update planting quantity based on cell count
-    total = conn.execute(
-        "SELECT COUNT(*) FROM grid_cells WHERE planting_id = ?", (data.planting_id,)
-    ).fetchone()[0]
-    conn.execute("UPDATE plantings SET quantity = ?, structure_id = ? WHERE id = ?",
-                 (total, structure_id, data.planting_id))
     conn.commit()
     conn.close()
+    total = sum(1 for cell in data.cells)
     return {"message": "Grid updated", "cell_count": total}
 
 

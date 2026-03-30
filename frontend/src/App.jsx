@@ -178,6 +178,8 @@ export default function App() {
   const [selectedPlanting, setSelectedPlanting] = useState(null);
   const [showModal, setShowModal] = useState(null); // 'planting', 'event', 'photo'
   const [editData, setEditData] = useState({});
+  const [modalError, setModalError] = useState(null);
+  const [showPlantingSummary, setShowPlantingSummary] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const [plantingPhotos, setPlantingPhotos] = useState([]);
@@ -252,9 +254,16 @@ export default function App() {
     loadData();
   };
 
-  const handleDuplicatePlanting = async (id) => {
-    await api.post(`/api/plantings/${id}/duplicate`, {});
-    loadData();
+  const handleDuplicatePlanting = (id) => {
+    const source = plantings.find(p => p.id === id);
+    if (!source) return;
+    const fields = ['seed_id', 'structure_id', 'year', 'qty_started', 'qty_planted',
+      'indoor_start_date', 'hardening_date', 'transplant_date', 'direct_sow_date',
+      'first_harvest_date', 'status', 'notes'];
+    const prefilled = {};
+    fields.forEach(k => { if (source[k] != null) prefilled[k] = source[k]; });
+    setEditData(prefilled);
+    setShowModal('duplicate');
   };
 
   const handleCreateEvent = async () => {
@@ -569,10 +578,10 @@ export default function App() {
 
   // ── Modals ─────────────────────────────────────────────────────────────────
 
-  const renderPlantingModal = (isEdit = false) => (
-    <div className="modal-overlay" onClick={() => setShowModal(null)}>
+  const renderPlantingModal = (isEdit = false, title = null) => (
+    <div className="modal-overlay" onClick={() => { setShowModal(null); setModalError(null); }}>
       <div className="modal" onClick={e => e.stopPropagation()}>
-        <h3 className="modal-title">{isEdit ? 'Edit Planting' : 'New Planting'}</h3>
+        <h3 className="modal-title">{title || (isEdit ? 'Edit Planting' : 'New Planting')}</h3>
 
         {!isEdit && (
           <div className="form-group">
@@ -625,30 +634,38 @@ export default function App() {
                     <input type="checkbox" checked={editData._customOrganic || false} onChange={e => setEditData(d => ({ ...d, _customOrganic: e.target.checked }))} /> Organic
                   </label>
                 </div>
-                <div style={{ marginTop: 12 }}>
+                {modalError && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{modalError}</div>}
+                <div style={{ marginTop: 8 }}>
                   <button className="btn btn-primary btn-sm" disabled={!editData._customName || (!editData._customCategory || (editData._customCategory === '_custom' && !editData._customCategoryText))} onClick={async () => {
-                    const category = editData._customCategory === '_custom' ? editData._customCategoryText : editData._customCategory;
-                    const method = editData._customMethod || '';
-                    const res = await api.post('/api/seeds', {
-                      name: editData._customName,
-                      category: category,
-                      days_to_maturity: editData._customDays || null,
-                      organic: editData._customOrganic || false,
-                      supplier: editData._customSupplier || null,
-                      start_indoors: method === 'indoor' || method === 'both',
-                      direct_sow: method === 'direct' || method === 'both',
-                      suggested_indoor_weeks: (method === 'indoor' || method === 'both') ? 6 : 0,
-                    });
-                    if (res.id) {
-                      const updatedSeeds = await api.get('/api/seeds');
-                      setSeeds(updatedSeeds);
-                      setEditData(d => ({
-                        ...d,
-                        seed_id: res.id,
-                        _addingCustom: false,
-                        _customName: '', _customCategory: '', _customCategoryText: '',
-                        _customDays: '', _customMethod: '', _customSupplier: '', _customOrganic: false,
-                      }));
+                    setModalError(null);
+                    try {
+                      const category = editData._customCategory === '_custom' ? editData._customCategoryText : editData._customCategory;
+                      const method = editData._customMethod || '';
+                      const res = await api.post('/api/seeds', {
+                        name: editData._customName,
+                        category: category,
+                        days_to_maturity: editData._customDays || null,
+                        organic: editData._customOrganic || false,
+                        supplier: editData._customSupplier || null,
+                        start_indoors: method === 'indoor' || method === 'both',
+                        direct_sow: method === 'direct' || method === 'both',
+                        suggested_indoor_weeks: (method === 'indoor' || method === 'both') ? 6 : 0,
+                      });
+                      if (res.id) {
+                        const updatedSeeds = await api.get('/api/seeds');
+                        setSeeds(updatedSeeds);
+                        setEditData(d => ({
+                          ...d,
+                          seed_id: res.id,
+                          _addingCustom: false,
+                          _customName: '', _customCategory: '', _customCategoryText: '',
+                          _customDays: '', _customMethod: '', _customSupplier: '', _customOrganic: false,
+                        }));
+                      } else {
+                        setModalError(res.detail ? JSON.stringify(res.detail) : 'Failed to save variety. Check all fields.');
+                      }
+                    } catch (err) {
+                      setModalError(`Error: ${err.message}`);
                     }
                   }}>Save and Select</button>
                 </div>
@@ -752,7 +769,7 @@ export default function App() {
         </div>
 
         <div className="modal-actions">
-          <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancel</button>
+          <button className="btn btn-secondary" onClick={() => { setShowModal(null); setModalError(null); }}>Cancel</button>
           <button className="btn btn-primary" onClick={isEdit ? handleUpdatePlanting : handleCreatePlanting}>
             {isEdit ? 'Save Changes' : 'Create Planting'}
           </button>
@@ -1064,15 +1081,86 @@ export default function App() {
     );
   };
 
-  const renderPlantings = () => (
+  const renderPlantings = () => {
+    const varietySummary = Object.values(
+      plantings.reduce((acc, p) => {
+        if (!acc[p.seed_id]) acc[p.seed_id] = { name: p.seed_name, category: p.category, rows: 0, started: 0, planted: 0 };
+        acc[p.seed_id].rows += 1;
+        acc[p.seed_id].started += p.qty_started || 0;
+        acc[p.seed_id].planted += p.qty_planted || 0;
+        return acc;
+      }, {})
+    ).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+
+    return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="page-title">Plantings</h1>
           <p className="page-sub">2026 Season</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditData({}); setShowModal('planting'); }}>+ New Planting</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => setShowPlantingSummary(s => !s)}>
+            {showPlantingSummary ? 'Hide Summary' : 'Show Summary'}
+          </button>
+          <button className="btn btn-primary" onClick={() => { setEditData({}); setShowModal('planting'); }}>+ New Planting</button>
+        </div>
       </div>
+
+      {showPlantingSummary && (() => {
+        const byCategory = varietySummary.reduce((acc, v) => {
+          if (!acc[v.category]) acc[v.category] = [];
+          acc[v.category].push(v);
+          return acc;
+        }, {});
+        const grandStarted = varietySummary.reduce((s, v) => s + v.started, 0);
+        const grandPlanted = varietySummary.reduce((s, v) => s + v.planted, 0);
+        const grandVarieties = varietySummary.length;
+
+        return (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, fontFamily: 'Fraunces, serif' }}>Variety Summary</div>
+          <table className="table" style={{ fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th>Variety</th>
+                <th style={{ textAlign: 'right' }}>Started</th>
+                <th style={{ textAlign: 'right' }}>Planted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(byCategory).map(([cat, varieties]) => {
+                const catStarted = varieties.reduce((s, v) => s + v.started, 0);
+                const catPlanted = varieties.reduce((s, v) => s + v.planted, 0);
+                return (
+                  <React.Fragment key={cat}>
+                    <tr style={{ background: catColor(cat) + '18' }}>
+                      <td colSpan={3} style={{ fontWeight: 700, fontSize: 12, color: catColor(cat), textTransform: 'uppercase', letterSpacing: '0.05em', padding: '6px 12px' }}>
+                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: catColor(cat), marginRight: 6 }} />
+                        {cat} — {catStarted} started, {catPlanted} planted
+                      </td>
+                    </tr>
+                    {varieties.map(v => (
+                      <tr key={v.name}>
+                        <td style={{ fontWeight: 500, paddingLeft: 24 }}>{v.name}</td>
+                        <td style={{ textAlign: 'right' }}>{v.started || '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{v.planted || '—'}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+              <tr style={{ borderTop: '2px solid #e8e4dd', fontWeight: 700 }}>
+                <td>Total — {grandVarieties} varieties</td>
+                <td style={{ textAlign: 'right' }}>{grandStarted}</td>
+                <td style={{ textAlign: 'right' }}>{grandPlanted}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        );
+      })()}
+
       <div className="card">
         <table className="table">
           <thead>
@@ -1155,7 +1243,8 @@ export default function App() {
         )}
       </div>
     </div>
-  );
+    );
+  };
 
   const renderCalendarView = () => (
     <div>
@@ -1288,12 +1377,9 @@ export default function App() {
     return (
       <div>
         <button className="btn btn-secondary" style={{ marginBottom: 16 }} onClick={() => { setSelectedBed(null); setView('map'); }}>← Back to Garden Map</button>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-          <div>
-            <h1 className="page-title">{bed.name} Planner</h1>
-            <p className="page-sub">{bed.width}x{bed.length} ft, {cols}x{rows} grid (6" cells)</p>
-          </div>
-          <button className="btn btn-primary" onClick={() => { setEditData({ structure_id: bed.id }); setShowModal('planting'); }}>+ New Planting</button>
+        <div style={{ marginBottom: 16 }}>
+          <h1 className="page-title">{bed.name} Planner</h1>
+          <p className="page-sub">{bed.width}x{bed.length} ft, {cols}x{rows} grid (6" cells)</p>
         </div>
 
         <div style={{ display: 'flex', gap: 24 }}>
@@ -1350,59 +1436,73 @@ export default function App() {
             </div>
           </div>
 
-          {/* Sidebar */}
+          {/* Sidebar — unified paint palette */}
           <div style={{ width: 280, flexShrink: 0 }}>
-            <div className="card" style={{ padding: 16 }}>
-              <h4 style={{ fontSize: 14, marginBottom: 12, fontFamily: 'Fraunces, serif' }}>Plantings in {bed.name}</h4>
-              {bedPlantings.length === 0 && (
-                <div style={{ color: '#8a8580', fontSize: 13, padding: '12px 0' }}>No plantings assigned. Create one to get started.</div>
-              )}
-              {bedPlantings.map(p => {
-                const isActive = activePaintPlanting?.id === p.id;
-                const count = cellCounts[p.id] || 0;
-                const seed = seeds.find(s => s.id === p.seed_id);
-                return (
-                  <div key={p.id}
-                    style={{
-                      padding: '8px 10px', marginBottom: 6, borderRadius: 8, cursor: 'pointer',
-                      border: isActive ? '2px solid #e8c56d' : '1px solid #e8e4dd',
-                      background: isActive ? '#faf5e8' : '#fff',
-                    }}
-                    onClick={() => setActivePaintPlanting(isActive ? null : p)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 12, height: 12, borderRadius: 3, background: catColor(p.category), flexShrink: 0 }} />
-                      <span style={{ fontWeight: 500, fontSize: 13, flex: 1 }}>{p.seed_name}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#8a8580', marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{count} cells placed</span>
-                      <span>Spacing: {seed?.spacing_inches || 12}"</span>
-                    </div>
-                    {isActive && count > 0 && (
-                      <button className="btn btn-danger btn-sm" style={{ marginTop: 6, width: '100%' }} onClick={(e) => { e.stopPropagation(); handleClearPlanting(p.id); }}>Clear all cells</button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Also show unassigned plantings that could be added */}
-            {plantings.filter(p => !p.structure_id).length > 0 && (
-              <div className="card" style={{ padding: 16, marginTop: 12 }}>
-                <h4 style={{ fontSize: 14, marginBottom: 8, fontFamily: 'Fraunces, serif' }}>Unassigned Plantings</h4>
-                {plantings.filter(p => !p.structure_id).map(p => (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 13, cursor: 'pointer' }}
-                    onClick={async () => {
-                      await api.put(`/api/plantings/${p.id}`, { structure_id: bed.id });
-                      loadData();
-                    }}>
-                    <div style={{ width: 10, height: 10, borderRadius: 2, background: catColor(p.category) }} />
-                    <span style={{ flex: 1 }}>{p.seed_name}</span>
-                    <span style={{ fontSize: 11, color: '#16a34a' }}>+ Assign</span>
-                  </div>
-                ))}
+            <div className="card" style={{ padding: 16, maxHeight: 580, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h4 style={{ fontSize: 14, fontFamily: 'Fraunces, serif', margin: 0 }}>Paint Palette</h4>
+                <button className="btn btn-primary btn-sm" onClick={() => { setEditData({ structure_id: bed.id }); setShowModal('planting'); }}>+ New</button>
               </div>
-            )}
+              <div style={{ fontSize: 11, color: '#8a8580', marginBottom: 10 }}>Click a planting to select it, then paint cells on the grid. A planting can span multiple beds.</div>
+              {plantings.length === 0 && (
+                <div style={{ color: '#8a8580', fontSize: 13, padding: '12px 0' }}>No plantings yet. Create one to get started.</div>
+              )}
+              {(() => {
+                const inThisBed = plantings.filter(p => p.structure_id === bed.id);
+                const others = plantings.filter(p => p.structure_id !== bed.id);
+                const grouped = others.reduce((acc, p) => {
+                  const key = p.structure_id ? (structures.find(s => s.id === p.structure_id)?.name || p.structure_id) : 'Unassigned';
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(p);
+                  return acc;
+                }, {});
+
+                const renderPaintable = (p) => {
+                  const isActive = activePaintPlanting?.id === p.id;
+                  const count = cellCounts[p.id] || 0;
+                  const seed = seeds.find(s => s.id === p.seed_id);
+                  return (
+                    <div key={p.id}
+                      style={{
+                        padding: '7px 10px', marginBottom: 5, borderRadius: 8, cursor: 'pointer',
+                        border: isActive ? '2px solid #e8c56d' : '1px solid #e8e4dd',
+                        background: isActive ? '#faf5e8' : '#fff',
+                      }}
+                      onClick={() => setActivePaintPlanting(isActive ? null : p)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 2, background: catColor(p.category), flexShrink: 0 }} />
+                        <span style={{ fontWeight: 500, fontSize: 13, flex: 1 }}>{p.seed_name}</span>
+                        {count > 0 && <span style={{ fontSize: 10, color: '#8a8580' }}>{count} cells</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#8a8580', marginTop: 2 }}>
+                        Spacing: {seed?.spacing_inches || 12}"
+                      </div>
+                      {isActive && count > 0 && (
+                        <button className="btn btn-danger btn-sm" style={{ marginTop: 5, width: '100%' }} onClick={(e) => { e.stopPropagation(); handleClearPlanting(p.id); }}>Clear cells here</button>
+                      )}
+                    </div>
+                  );
+                };
+
+                return (
+                  <>
+                    {inThisBed.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#8a8580', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '4px 0 6px' }}>In {bed.name}</div>
+                        {inThisBed.map(renderPaintable)}
+                      </>
+                    )}
+                    {Object.entries(grouped).map(([groupName, groupPlantings]) => (
+                      <div key={groupName}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#8a8580', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '8px 0 6px' }}>{groupName}</div>
+                        {groupPlantings.map(renderPaintable)}
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </div>
       </div>
@@ -1573,6 +1673,7 @@ export default function App() {
         </div>
 
         {showModal === 'planting' && renderPlantingModal(false)}
+        {showModal === 'duplicate' && renderPlantingModal(false, 'Duplicate Planting')}
         {showModal === 'edit-planting' && renderPlantingModal(true)}
         {showModal === 'event' && renderEventModal()}
         {showModal === 'photo' && renderPhotoModal()}
