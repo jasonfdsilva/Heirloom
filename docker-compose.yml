@@ -9,7 +9,7 @@ services:
       - heirloom-data:/app/data
       - heirloom-photos:/app/photos
     environment:
-      - DATABASE_URL=sqlite:///app/data/heirloom.db
+      - DATABASE_URL=sqlite:////app/data/heirloom.db
       - PHOTOS_DIR=/app/photos
     restart: unless-stopped
 

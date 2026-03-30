@@ -14,7 +14,7 @@ import sqlite3
 
 app = FastAPI(title="Heirloom Garden Tracker")
 
-DB_PATH = os.getenv("DATABASE_URL", "sqlite:///app/data/heirloom.db").replace("sqlite:///", "")
+DB_PATH = os.getenv("DATABASE_URL", "sqlite:////app/data/heirloom.db").replace("sqlite:///", "")
 PHOTOS_DIR = os.getenv("PHOTOS_DIR", "/app/photos")
 
 os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else ".", exist_ok=True)
