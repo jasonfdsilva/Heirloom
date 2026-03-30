@@ -338,6 +338,9 @@ def duplicate_planting(planting_id: int):
     new_id = cursor.lastrowid
     conn.close()
     return {"id": new_id, "message": "Planting duplicated"}
+
+
+@app.put("/api/plantings/{planting_id}")
 def update_planting(planting_id: int, data: PlantingUpdate):
     conn = get_db()
     existing = conn.execute("SELECT id FROM plantings WHERE id = ?", (planting_id,)).fetchone()
