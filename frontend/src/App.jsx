@@ -520,11 +520,11 @@ export default function App() {
                 const startDate = p.transplant_date || p.direct_sow_date;
                 const isOutdoorProjected = new Date(startDate + 'T00:00:00') > new Date();
                 const start = dateToPercent(startDate);
-                const end = dateToPercent(p.first_harvest_date || startDate);
+                const end = dateToPercent(p.first_harvest_date || '2026-09-30');
                 if (start !== null) bars.push({
                   left: start,
                   width: Math.max(end - start, 2),
-                  color: catColor(p.category),
+                  color: '#16a34a',
                   label: isOutdoorProjected ? 'Growing (projected)' : 'Growing',
                   projected: isOutdoorProjected,
                 });
@@ -544,10 +544,10 @@ export default function App() {
                       <div key={i} className="cal-bar" style={{
                         left: bar.left + '%',
                         width: bar.width + '%',
-                        background: bar.projected
-                          ? `repeating-linear-gradient(90deg, ${bar.color} 0px, ${bar.color} 6px, transparent 6px, transparent 10px)`
-                          : bar.color,
-                        opacity: bar.projected ? 0.6 : 1,
+                        background: bar.projected ? `${bar.color}30` : bar.color,
+                        border: bar.projected ? `2px dashed ${bar.color}` : 'none',
+                        boxSizing: bar.projected ? 'border-box' : undefined,
+                        opacity: 1,
                       }} title={bar.label} />
                     ))}
                   </div>
@@ -1172,7 +1172,7 @@ export default function App() {
           <span style={{ width: 12, height: 12, borderRadius: 3, background: '#16a34a', display: 'inline-block' }}></span> Growing/Outdoor
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-          <span style={{ width: 24, height: 12, borderRadius: 3, background: 'repeating-linear-gradient(90deg,#16a34a 0px,#16a34a 6px,transparent 6px,transparent 10px)', opacity: 0.6, display: 'inline-block' }}></span> Projected outdoor
+          <span style={{ width: 24, height: 12, borderRadius: 3, background: '#16a34a30', border: '2px dashed #16a34a', boxSizing: 'border-box', display: 'inline-block' }}></span> Projected outdoor
         </div>
       </div>
       {renderCalendar()}
