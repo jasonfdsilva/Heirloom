@@ -254,6 +254,7 @@ export default function App() {
   const [plantPhotos, setPlantPhotos] = useState([]);
   const [plantPanelLoading, setPlantPanelLoading] = useState(false);
   const [expandedPlantingIds, setExpandedPlantingIds] = useState(new Set());
+  const [collapsedCategories, setCollapsedCategories] = useState(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -1652,7 +1653,47 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {plantings.map(p => {
+                {(() => {
+                  // Group plantings by category
+                  const byCategory = {};
+                  plantings.forEach(p => {
+                    const cat = p.category || 'Other';
+                    if (!byCategory[cat]) byCategory[cat] = [];
+                    byCategory[cat].push(p);
+                  });
+                  const categories = Object.keys(byCategory).sort();
+
+                  return categories.flatMap(cat => {
+                    const catPlantings = byCategory[cat];
+                    const isCatCollapsed = collapsedCategories.has(cat);
+                    const catStarted = catPlantings.reduce((s, p) => s + (p.qty_started || 0), 0);
+                    const catPlanted = catPlantings.reduce((s, p) => s + (p.qty_planted || 0), 0);
+                    const color = catColor(cat);
+
+                    const categoryRow = (
+                      <tr key={`cat-${cat}`}
+                        style={{ background: color + '14', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => setCollapsedCategories(prev => {
+                          const next = new Set(prev);
+                          if (next.has(cat)) next.delete(cat); else next.add(cat);
+                          return next;
+                        })}>
+                        <td colSpan={8} style={{ padding: '8px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 10, color, width: 12, textAlign: 'center' }}>{isCatCollapsed ? '▶' : '▼'}</span>
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
+                            <span style={{ fontWeight: 700, fontSize: 12, color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cat}</span>
+                            <span style={{ fontSize: 12, color: '#8a8580', fontWeight: 400 }}>
+                              {catPlantings.length} {catPlantings.length === 1 ? 'variety' : 'varieties'} · {catStarted} started · {catPlanted} planted
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+
+                    if (isCatCollapsed) return [categoryRow];
+
+                    const plantingRows = catPlantings.map(p => {
                   const seed = seeds.find(sd => sd.id === p.seed_id);
                   const isExpanded = expandedPlantingIds.has(p.id);
                   const members = plantingMembersMap[p.id] || [];
@@ -1769,7 +1810,10 @@ export default function App() {
                       })}
                     </React.Fragment>
                   );
-                })}
+                });
+                    return [categoryRow, ...plantingRows];
+                  });
+                })()}
               </tbody>
             </table>
           );
