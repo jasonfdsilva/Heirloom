@@ -13,6 +13,10 @@ const api = {
     return r.json();
   },
   del: async (url) => { const r = await fetch(url, { method: 'DELETE' }); return r.json(); },
+  patch: async (url, data) => {
+    const r = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    return r.json();
+  },
   upload: async (url, formData) => {
     const r = await fetch(url, { method: 'POST', body: formData });
     return r.json();
@@ -44,6 +48,36 @@ const EVENT_TYPES = [
 ];
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+// BFS clustering: groups cells where any two cells are within maxGap Chebyshev distance of each other
+const clusterCells = (cells, maxGap = 3) => {
+  const visited = new Set();
+  const clusters = [];
+  for (const cell of cells) {
+    const key = `${cell.row},${cell.col}`;
+    if (visited.has(key)) continue;
+    const cluster = [];
+    const queue = [cell];
+    visited.add(key);
+    while (queue.length) {
+      const cur = queue.shift();
+      cluster.push(cur);
+      for (const candidate of cells) {
+        const cKey = `${candidate.row},${candidate.col}`;
+        if (visited.has(cKey)) continue;
+        const dist = Math.max(Math.abs(candidate.row - cur.row), Math.abs(candidate.col - cur.col));
+        if (dist <= maxGap) {
+          visited.add(cKey);
+          queue.push(candidate);
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+};
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
@@ -161,6 +195,24 @@ const styles = `
   .empty { text-align: center; padding: 48px 24px; color: #8a8580; }
   .empty-icon { font-size: 48px; margin-bottom: 12px; }
 
+  /* Plant Panel */
+  .plant-panel { position: fixed; top: 56px; right: 0; bottom: 0; width: 340px; background: #fff; border-left: 1px solid #e8e4dd; overflow-y: auto; z-index: 150; transform: translateX(100%); transition: transform 0.25s ease; display: flex; flex-direction: column; }
+  .plant-panel.open { transform: translateX(0); }
+  .plant-panel-header { padding: 16px 20px; border-bottom: 1px solid #e8e4dd; position: sticky; top: 0; background: #fff; z-index: 1; }
+  .plant-section-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 10px 20px 4px; border-top: 2px solid; margin-top: 4px; }
+  .plant-section-header.individual { border-color: #86efac; color: #16a34a; }
+  .plant-section-header.harvest { border-color: #fb923c; color: #c2410c; }
+  .plant-section-header.family { border-color: #fbbf24; color: #b45309; }
+  .plant-section-body { padding: 8px 20px; }
+  .status-pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; cursor: pointer; border: 2px solid transparent; margin: 2px; transition: all 0.15s; }
+  .status-pill.active { border-color: #2d2a24; }
+  /* Plantings accordion */
+  .planting-family-row { display: flex; align-items: center; padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0ece6; gap: 8px; }
+  .planting-family-row:hover td, .planting-family-row:hover { background: #faf8f5; }
+  .plant-member-row { display: flex; align-items: center; padding: 6px 12px 6px 48px; border-bottom: 1px solid #f5f2ee; gap: 8px; cursor: pointer; font-size: 13px; }
+  .plant-member-row:hover { background: #faf8f5; }
+  .plant-short-id { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; font-family: 'DM Mono', monospace; min-width: 44px; justify-content: center; }
+
   @media (max-width: 768px) {
     .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
     .detail-layout { grid-template-columns: 1fr; }
@@ -184,11 +236,24 @@ export default function App() {
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const [plantingPhotos, setPlantingPhotos] = useState([]);
   const [mapHighlight, setMapHighlight] = useState(null);
-  const [showMapThumbs, setShowMapThumbs] = useState(false);
+  const [showMapThumbs, setShowMapThumbs] = useState(true);
+  const [mapZoom, setMapZoom] = useState(1.25);
   const [selectedBed, setSelectedBed] = useState(null);
   const [gridCells, setGridCells] = useState([]);
+  const [mapGridCells, setMapGridCells] = useState({});
+  const [labelPositions, setLabelPositions] = useState({});
+  const [isDirtyLabels, setIsDirtyLabels] = useState(false);
+  const [draggingLabel, setDraggingLabel] = useState(null);
+  const mapSvgRef = useRef(null);
   const [activePaintPlanting, setActivePaintPlanting] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [mapEditMode, setMapEditMode] = useState(false);
+  const [selectedPlantGuid, setSelectedPlantGuid] = useState(null);
+  const [plantDetail, setPlantDetail] = useState(null);
+  const [plantHarvests, setPlantHarvests] = useState([]);
+  const [plantPhotos, setPlantPhotos] = useState([]);
+  const [plantPanelLoading, setPlantPanelLoading] = useState(false);
+  const [expandedPlantingIds, setExpandedPlantingIds] = useState(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -198,6 +263,17 @@ export default function App() {
         api.get('/api/plantings?year=2026'),
       ]);
       setSeeds(s); setStructures(st); setPlantings(p);
+      // Load all grid cells for garden map summary view
+      const [gridResults, labelPos] = await Promise.all([
+        Promise.all(st.map(str => api.get(`/api/structures/${str.id}/grid`).then(cells => [str.id, cells]))),
+        api.get('/api/label-positions'),
+      ]);
+      const gridMap = {};
+      gridResults.forEach(([sid, cells]) => { gridMap[sid] = cells; });
+      setMapGridCells(gridMap);
+      const posMap = {};
+      labelPos.forEach(p => { posMap[`${p.entity_type}:${p.entity_id}`] = { x: p.label_x, y: p.label_y, orientation: p.orientation || 'horizontal', hidden: !!p.hidden, label_text: p.label_text || null }; });
+      setLabelPositions(posMap);
     } catch (e) { console.error('Load failed:', e); }
     setLoading(false);
   }, []);
@@ -207,6 +283,36 @@ export default function App() {
   const loadPhotos = async (plantingId) => {
     const photos = await api.get(`/api/plantings/${plantingId}/photos`);
     setPlantingPhotos(photos);
+  };
+
+  const openPlantPanel = async (plantGuid) => {
+    if (!plantGuid) return;
+    setSelectedPlantGuid(plantGuid);
+    setPlantPanelLoading(true);
+    const [detail, harvests, photos] = await Promise.all([
+      api.get(`/api/plants/${plantGuid}`),
+      api.get(`/api/plants/${plantGuid}/harvests`),
+      api.get(`/api/plants/${plantGuid}/photos`),
+    ]);
+    setPlantDetail(detail);
+    setPlantHarvests(harvests);
+    setPlantPhotos(photos);
+    setPlantPanelLoading(false);
+  };
+
+  const closePlantPanel = () => {
+    setSelectedPlantGuid(null);
+    setPlantDetail(null);
+    setPlantHarvests([]);
+    setPlantPhotos([]);
+  };
+
+  const refreshPlantMapCells = async (structureId) => {
+    const updatedCells = await api.get(`/api/structures/${structureId}/grid`);
+    setMapGridCells(prev => ({ ...prev, [structureId]: updatedCells }));
+    if (selectedBed?.id === structureId) {
+      setGridCells(updatedCells);
+    }
   };
 
   const openPlantingDetail = (p) => {
@@ -387,45 +493,55 @@ export default function App() {
   const renderGardenMap = () => {
     const W = 680, H = 880;
     const PX_PER_FT = 26;
+    const CELL_SIZE = 6; // 6-inch grid cells (matches bed planner)
 
-    // Neutral palette
-    const MAP_BG = '#7a9470';          // muted sage — garden ground
-    const MAP_PATIO = '#c8b89a';       // warm stone
-    const EMPTY_BED = '#c4b49a';       // warm tan — bare soil
-    const EMPTY_BOX = '#b8a890';       // slightly cooler tan
+    const MAP_BG = '#4a6e42';
+    const MAP_PATIO = '#c8b89a';
+    const BED_FILL = '#f8f4ec';
+    const BOX_FILL = '#f2ede3';
+    const BED_BORDER = '#7a5c40';
+    const BOX_BORDER = '#9a8070';
     const FENCE = '#2a2420';
+    const STRIP_FILL = '#9a8060';
+
+    const getSVGCoords = (e) => {
+      const svg = mapSvgRef.current;
+      if (!svg) return { x: 0, y: 0 };
+      const rect = svg.getBoundingClientRect();
+      return { x: (e.clientX - rect.left) * (W / rect.width), y: (e.clientY - rect.top) * (H / rect.height) };
+    };
+
+    const startDrag = (e, key, curX, curY) => {
+      e.stopPropagation();
+      const coords = getSVGCoords(e);
+      setDraggingLabel({ key, offsetX: coords.x - curX, offsetY: coords.y - curY });
+    };
 
     return (
-      <div className="garden-map">
-        <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            {showMapThumbs && structures.map(s => {
-              const planted = plantingsByStructure[s.id];
-              if (!planted) return null;
-              const imageUrl = seeds.find(sd => sd.id === planted[0].seed_id)?.image_url;
-              if (!imageUrl) return null;
-              const tileSize = s.type === 'box' ? 14 : 18;
-              return [
-                <clipPath key={`bedclip-${s.id}`} id={`bedclip-${s.id}`}>
-                  <rect x={s.map_x} y={s.map_y} width={s.width * PX_PER_FT} height={s.length * PX_PER_FT} rx={s.type === 'box' ? 3 : 4}/>
-                </clipPath>,
-                <pattern key={`pat-${s.id}`} id={`pat-${s.id}`} patternUnits="userSpaceOnUse"
-                  x={s.map_x} y={s.map_y} width={tileSize} height={tileSize}>
-                  <image href={imageUrl} x="0" y="0" width={tileSize} height={tileSize} preserveAspectRatio="xMidYMid slice"/>
-                </pattern>
-              ];
-            })}
-          </defs>
+      <div className="garden-map" style={{ overflowY: 'auto', overflowX: 'auto' }}>
+        <svg ref={mapSvgRef}
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ width: mapZoom === 1 ? '100%' : `${W * mapZoom}px`, height: 'auto', display: 'block', cursor: draggingLabel ? 'grabbing' : 'default' }}
+          xmlns="http://www.w3.org/2000/svg"
+          onMouseMove={e => {
+            if (!draggingLabel) return;
+            const coords = getSVGCoords(e);
+            setLabelPositions(prev => ({ ...prev, [draggingLabel.key]: { x: coords.x - draggingLabel.offsetX, y: coords.y - draggingLabel.offsetY } }));
+            setIsDirtyLabels(true);
+          }}
+          onMouseUp={() => setDraggingLabel(null)}
+          onMouseLeave={() => setDraggingLabel(null)}>
 
           {/* Garden ground */}
           <rect x="20" y="20" width="640" height="840" fill={MAP_BG} rx="8"/>
           {/* Patio / top deck */}
-          <rect x="20" y="20" width="640" height="100" fill={MAP_PATIO} opacity="0.6" rx="8"/>
+          <rect x="20" y="20" width="640" height="100" fill={MAP_PATIO} opacity="0.55" rx="8"/>
           {/* Right fence */}
           <rect x="640" y="120" width="20" height="740" fill={FENCE} opacity="0.8"/>
           {/* Left path strip */}
           <rect x="20" y="200" width="30" height="400" fill="#6a5a3a" opacity="0.2" rx="4"/>
 
+          {/* Pass 1: bed backgrounds and grid cells */}
           {structures.map(s => {
             const x = s.map_x;
             const y = s.map_y;
@@ -434,104 +550,281 @@ export default function App() {
             const isBox = s.type === 'box';
             const isStrip = s.type === 'strip';
             const isBed = s.type === 'bed';
-            const plantedHere = plantingsByStructure[s.id];
             const isHighlighted = mapHighlight === s.id;
+            const cx = x + w / 2;
+            const cy = y + h / 2;
 
-            const today = new Date();
-            const projectedHere = plantings.filter(p =>
-              p.structure_id === s.id && p.qty_planted &&
-              p.transplant_date && new Date(p.transplant_date + 'T00:00:00') > today
-            );
-            const isProjected = !plantedHere && projectedHere.length > 0;
-
-            let fillColor, opacity;
-            if (plantedHere) { fillColor = catColor(plantedHere[0].category); opacity = 0.88; }
-            else if (isProjected) { fillColor = catColor(projectedHere[0].category); opacity = 0.38; }
-            else if (isStrip) { fillColor = '#7a6040'; opacity = 0.55; }
-            else if (isBed) { fillColor = EMPTY_BED; opacity = 1; }
-            else { fillColor = EMPTY_BOX; opacity = 1; }
-
-            const isVertical = s.id === 'bed-7' || isStrip;
             const rx = isStrip ? 2 : (isBox ? 3 : 4);
-            const stroke = isHighlighted ? '#e8c56d' : isProjected ? '#e8c56d' : (isStrip ? '#6a5030' : '#8a7060');
-            const strokeWidth = isHighlighted ? 3 : isProjected ? 1.5 : 1;
-            const strokeDash = isProjected ? '5 3' : 'none';
+            const bedFill = isStrip ? STRIP_FILL : (isBox ? BOX_FILL : BED_FILL);
+            const stroke = isHighlighted ? '#e8c56d' : (isBox ? BOX_BORDER : BED_BORDER);
+            const strokeWidth = isHighlighted ? 2.5 : (isBed ? 2 : 1.5);
 
-            const hasThumb = showMapThumbs && plantedHere &&
-              seeds.find(sd => sd.id === plantedHere[0].seed_id)?.image_url;
+            const bedCols = Math.floor(s.width * 12 / CELL_SIZE);
+            const bedRows = Math.floor(s.length * 12 / CELL_SIZE);
+            const cellPxW = bedCols > 0 ? w / bedCols : w;
+            const cellPxH = bedRows > 0 ? h / bedRows : h;
 
-            // Label text color: dark on light empty beds, white on colored/thumb beds
-            const labelColor = plantedHere || isProjected ? '#fff' : '#5a4a36';
-            const plantLabelColor = isProjected ? 'rgba(232,197,109,0.85)' : '#fff';
+            const cells = mapGridCells[s.id] || [];
+            const hasCells = cells.length > 0;
+
+            const pInfoMap = {};
+            cells.forEach(c => {
+              if (!pInfoMap[c.planting_id]) {
+                const p = plantings.find(pl => pl.id === c.planting_id);
+                const seed = p ? seeds.find(sd => sd.id === p.seed_id) : null;
+                pInfoMap[c.planting_id] = {
+                  color: catColor(p?.category),
+                  imgUrl: showMapThumbs ? seed?.image_url : null,
+                };
+              }
+            });
 
             return (
               <g key={s.id} className="map-bed" onClick={() => {
                 const structObj = structures.find(st => st.id === s.id);
                 if (structObj) openBedPlanner(structObj);
               }}>
-                {/* Base fill */}
-                <rect x={x} y={y} width={w} height={h}
-                  fill={hasThumb ? `url(#pat-${s.id})` : fillColor}
-                  clipPath={hasThumb ? `url(#bedclip-${s.id})` : undefined}
-                  stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDash}
-                  rx={rx} opacity={hasThumb ? 0.9 : opacity}
-                />
-                {/* Category color overlay on top of thumbnail pattern */}
-                {hasThumb && (
-                  <rect x={x} y={y} width={w} height={h}
-                    fill={fillColor} opacity={0.38} rx={rx}
-                    stroke={stroke} strokeWidth={strokeWidth}
-                  />
-                )}
-                {/* Raised bed corner brackets */}
+                <rect x={x} y={y} width={w} height={h} fill={bedFill} stroke={stroke} strokeWidth={strokeWidth} rx={rx}/>
                 {isBed && <>
-                  <rect x={x-2} y={y-2} width={7} height={7} fill="#8a7060" rx={1.5}/>
-                  <rect x={x+w-5} y={y-2} width={7} height={7} fill="#8a7060" rx={1.5}/>
-                  <rect x={x-2} y={y+h-5} width={7} height={7} fill="#8a7060" rx={1.5}/>
-                  <rect x={x+w-5} y={y+h-5} width={7} height={7} fill="#8a7060" rx={1.5}/>
+                  <rect x={x-2} y={y-2} width={7} height={7} fill={BED_BORDER} rx={1.5}/>
+                  <rect x={x+w-5} y={y-2} width={7} height={7} fill={BED_BORDER} rx={1.5}/>
+                  <rect x={x-2} y={y+h-5} width={7} height={7} fill={BED_BORDER} rx={1.5}/>
+                  <rect x={x+w-5} y={y+h-5} width={7} height={7} fill={BED_BORDER} rx={1.5}/>
                 </>}
-
-                {/* Labels: name OUTSIDE (above rect), plants inside/below */}
-                {isVertical ? (
-                  /* Vertical beds: rotated label inside */
-                  <text x={x + w/2} y={y + h/2} textAnchor="middle" dominantBaseline="middle"
-                    fill="#fff" fontSize={isStrip ? 9 : 11} fontWeight="600" fontFamily="DM Sans"
-                    transform={`rotate(-90,${x + w/2},${y + h/2})`}>
-                    {isStrip ? `Strip ${s.width}x${s.length}` : `${s.name}`}
-                  </text>
-                ) : (
-                  <>
-                    {/* Bed/box name — above the rect */}
-                    <text x={x + w/2} y={y - 3} textAnchor="middle" dominantBaseline="auto"
-                      fill="#f0ece4" fontSize={isBox ? 8 : 11} fontWeight="700" fontFamily="DM Sans"
-                      style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
-                      {s.name}
-                    </text>
-                    {/* Size label — small, inside top of rect */}
-                    {!isBox && !hasThumb && (
-                      <text x={x + w/2} y={y + 11} textAnchor="middle" dominantBaseline="middle"
-                        fill="rgba(255,255,255,0.5)" fontSize={8} fontFamily="DM Sans">
-                        {s.width}x{s.length}
-                      </text>
-                    )}
-                    {/* Plant varieties — inside rect center */}
-                    {(plantedHere || isProjected) && (
-                      <text x={x + w/2} y={y + h/2} textAnchor="middle" dominantBaseline="middle"
-                        fill={plantLabelColor} fontSize={isBox ? 7 : 9} fontWeight="600" fontFamily="DM Sans">
-                        {isProjected
-                          ? `⟳ ${projectedHere.map(pp => pp.seed_name).join(', ').substring(0, 18)}`
-                          : plantedHere.map(pp => pp.seed_name).join(', ').substring(0, 22)
-                        }
-                      </text>
-                    )}
-                  </>
+                {isStrip && (
+                  <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
+                    fill="rgba(255,255,255,0.75)" fontSize={8} fontWeight="600" fontFamily="DM Sans"
+                    transform={`rotate(-90,${cx},${cy})`}>{s.name}</text>
+                )}
+                {!isStrip && cells.map(c => {
+                  const info = pInfoMap[c.planting_id];
+                  const cellX = x + c.col * cellPxW;
+                  const cellY = y + c.row * cellPxH;
+                  return (
+                    <g key={`${c.row}-${c.col}`}
+                      onDoubleClick={e => { e.stopPropagation(); if (c.plant_guid) openPlantPanel(c.plant_guid); }}
+                      style={{ cursor: c.plant_guid ? 'pointer' : 'default' }}>
+                      {info?.imgUrl ? (
+                        <>
+                          <image href={info.imgUrl} x={cellX} y={cellY} width={cellPxW} height={cellPxH} preserveAspectRatio="xMidYMid slice"/>
+                          <rect x={cellX} y={cellY} width={cellPxW} height={cellPxH} fill={info.color} opacity={0.4}/>
+                        </>
+                      ) : (
+                        <rect x={cellX} y={cellY} width={cellPxW} height={cellPxH} fill={info?.color || '#888'} opacity={0.75}/>
+                      )}
+                      {c.short_label && cellPxW >= 14 && (
+                        <text x={cellX + cellPxW / 2} y={cellY + cellPxH / 2}
+                          textAnchor="middle" dominantBaseline="middle"
+                          fill="#fff" fontSize={Math.min(cellPxW * 0.38, 7)}
+                          fontFamily="DM Sans" fontWeight="700"
+                          style={{ pointerEvents: 'none', filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.9))', userSelect: 'none' }}>
+                          {c.short_label}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+                {!isStrip && !hasCells && (
+                  <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
+                    fill={isBox ? '#b8a898' : '#c4b8a8'} fontSize={isBox ? 7 : 8}
+                    fontFamily="DM Sans" fontStyle="italic">empty</text>
                 )}
               </g>
             );
           })}
 
+          {/* Pass 2: all labels on top — never covered by bed backgrounds */}
+          <g>
+            {structures.map(s => {
+              const x = s.map_x;
+              const y = s.map_y;
+              const w = s.width * PX_PER_FT;
+              const h = s.length * PX_PER_FT;
+              const isBox = s.type === 'box';
+              const isStrip = s.type === 'strip';
+              const cx = x + w / 2;
+
+              const bedCols = Math.floor(s.width * 12 / CELL_SIZE);
+              const bedRows = Math.floor(s.length * 12 / CELL_SIZE);
+              const cellPxW = bedCols > 0 ? w / bedCols : w;
+              const cellPxH = bedRows > 0 ? h / bedRows : h;
+
+              const cells = mapGridCells[s.id] || [];
+              // Group cells by planting_id then cluster within each group
+              const byPlanting = {};
+              cells.forEach(c => {
+                if (!byPlanting[c.planting_id]) byPlanting[c.planting_id] = [];
+                byPlanting[c.planting_id].push(c);
+              });
+              const plantingClusters = [];
+              Object.entries(byPlanting).forEach(([pid, groupCells]) => {
+                const displayName = groupCells[0].short_label || groupCells[0].seed_name;
+                clusterCells(groupCells, 3).forEach(cluster => {
+                  const minR = Math.min(...cluster.map(c => c.row));
+                  const maxR = Math.max(...cluster.map(c => c.row));
+                  const minC = Math.min(...cluster.map(c => c.col));
+                  const maxC = Math.max(...cluster.map(c => c.col));
+                  plantingClusters.push({ pid, name: displayName, minR, maxR, minC, maxC });
+                });
+              });
+              // Stagger labels whose column spans overlap (for below-bed placement)
+              plantingClusters.forEach((cl, i) => {
+                cl.stackIndex = 0;
+                for (let j = 0; j < i; j++) {
+                  const other = plantingClusters[j];
+                  const colOverlap = !(cl.maxC < other.minC || cl.minC > other.maxC);
+                  if (colOverlap && other.stackIndex >= cl.stackIndex) {
+                    cl.stackIndex = other.stackIndex + 1;
+                  }
+                }
+              });
+
+              const toggleOrientation = (key) => {
+                setLabelPositions(prev => {
+                  const cur = prev[key] || {};
+                  return { ...prev, [key]: { ...cur, orientation: (cur.orientation || 'horizontal') === 'horizontal' ? 'vertical' : 'horizontal' } };
+                });
+                setIsDirtyLabels(true);
+              };
+              const toggleHidden = (key, defaultPos) => {
+                setLabelPositions(prev => {
+                  const cur = prev[key] || defaultPos;
+                  return { ...prev, [key]: { ...cur, hidden: !cur.hidden } };
+                });
+                setIsDirtyLabels(true);
+              };
+              const renderLabel = (key, lx, ly, defaultText, fill, fontSize, textAnchor, defaultPos) => {
+                const pos = labelPositions[key] || defaultPos;
+                const isHidden = pos.hidden;
+                const isVertical = (pos.orientation || 'horizontal') === 'vertical';
+                const displayText = pos.label_text || defaultText;
+                const px = pos.x ?? lx, py = pos.y ?? ly;
+
+                // View mode: hidden labels are invisible, visible labels render text-only
+                if (!mapEditMode) {
+                  if (isHidden) return null;
+                  const transform = isVertical ? `rotate(-90,${px},${py})` : undefined;
+                  return (
+                    <text key={key} x={px} y={py}
+                      textAnchor={textAnchor} dominantBaseline="middle"
+                      fill={fill} fontSize={fontSize} fontFamily="DM Sans" fontWeight="600"
+                      transform={transform}
+                      style={{ pointerEvents: 'none', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.9))', userSelect: 'none' }}>
+                      {displayText}
+                    </text>
+                  );
+                }
+
+                // Edit mode: hidden labels show as draggable dot
+                if (isHidden) {
+                  return (
+                    <g key={key}
+                      onClick={e => { e.stopPropagation(); toggleHidden(key, defaultPos); }}
+                      onMouseDown={e => startDrag(e, key, px, py)}
+                      style={{ cursor: 'pointer' }}>
+                      <circle cx={px} cy={py} r={5} fill={fill} opacity={0.6}/>
+                      <circle cx={px} cy={py} r={5} fill="none" stroke={fill} strokeWidth={1} opacity={0.9}/>
+                    </g>
+                  );
+                }
+
+                const transform = isVertical ? `rotate(-90,${px},${py})` : undefined;
+                const btnOffset = textAnchor === 'middle'
+                  ? displayText.length * fontSize * 0.3 + 10
+                  : displayText.length * fontSize * 0.58 + 12;
+                return (
+                  <g key={key}>
+                    <text x={px} y={py}
+                      textAnchor={textAnchor} dominantBaseline="middle"
+                      fill={fill} fontSize={fontSize} fontFamily="DM Sans" fontWeight="600"
+                      transform={transform}
+                      style={{ cursor: 'grab', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.9))', userSelect: 'none' }}
+                      onMouseDown={e => startDrag(e, key, px, py)}
+                      onClick={e => e.stopPropagation()}
+                      onDoubleClick={e => {
+                        e.stopPropagation();
+                        const newText = window.prompt('Label text:', displayText);
+                        if (newText !== null) {
+                          setLabelPositions(prev => ({ ...prev, [key]: { ...(prev[key] || defaultPos), label_text: newText.trim() || null } }));
+                          setIsDirtyLabels(true);
+                        }
+                      }}>
+                      {displayText}
+                    </text>
+                    {/* Toggle hide button */}
+                    <g onClick={e => { e.stopPropagation(); toggleHidden(key, defaultPos); }}
+                      style={{ cursor: 'pointer' }}>
+                      <circle cx={px + btnOffset} cy={py} r={6} fill="#1f2937" opacity={0.75}/>
+                      <text x={px + btnOffset} y={py} textAnchor="middle" dominantBaseline="middle"
+                        fill="white" fontSize={8} fontFamily="DM Sans" fontWeight="700"
+                        style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                        –
+                      </text>
+                    </g>
+                    {/* Toggle orientation button */}
+                    <g onClick={e => { e.stopPropagation(); toggleOrientation(key); }}
+                      style={{ cursor: 'pointer' }}>
+                      <circle cx={px + btnOffset + 15} cy={py} r={6} fill="#1f2937" opacity={0.75}/>
+                      <text x={px + btnOffset + 15} y={py} textAnchor="middle" dominantBaseline="middle"
+                        fill="white" fontSize={8} fontFamily="DM Sans" fontWeight="700"
+                        style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                        {isVertical ? '↔' : '↕'}
+                      </text>
+                    </g>
+                  </g>
+                );
+              };
+
+              return (
+                <g key={s.id} style={{ pointerEvents: 'all' }}>
+                  {/* Structure name label — amber */}
+                  {!isStrip && (() => {
+                    const sKey = `struct:${s.id}`;
+                    return renderLabel(sKey, cx, y - 4, s.name, '#fbbf24', isBox ? 8 : 10, 'middle', { x: cx, y: y - 4, orientation: 'horizontal', hidden: false });
+                  })()}
+                  {/* Plant labels — one per cluster, mint green, with bracket + dashed leader line */}
+                  {!isStrip && plantingClusters.map(({ pid, name, minR, maxR, minC, maxC, stackIndex }) => {
+                    const spanLeft = x + minC * cellPxW;
+                    const spanRight = x + (maxC + 1) * cellPxW;
+                    const clusterMidX = (spanLeft + spanRight) / 2;
+                    const clusterBottom = y + (maxR + 1) * cellPxH;
+                    const spanW = spanRight - spanLeft;
+                    const defaultX = clusterMidX;
+                    const defaultY = y + h + 10 + (stackIndex || 0) * 14;
+                    const pKey = `cluster:${s.id}:${pid}:${minR}-${maxR}-${minC}-${maxC}`;
+                    const pos = labelPositions[pKey] || {};
+                    const isHidden = pos.hidden;
+                    const lx = pos.x ?? defaultX;
+                    const ly = pos.y ?? defaultY;
+                    return (
+                      <g key={pKey}>
+                        {!isHidden && (
+                          <g style={{ pointerEvents: 'none' }}>
+                            {/* Column-span bracket at cluster bottom edge */}
+                            {spanW > 3 && <>
+                              <line x1={spanLeft + 1} y1={clusterBottom + 2} x2={spanRight - 1} y2={clusterBottom + 2}
+                                stroke="#86efac" strokeWidth={1.2} opacity={0.5}/>
+                              <line x1={spanLeft + 1} y1={clusterBottom} x2={spanLeft + 1} y2={clusterBottom + 4}
+                                stroke="#86efac" strokeWidth={0.9} opacity={0.45}/>
+                              <line x1={spanRight - 1} y1={clusterBottom} x2={spanRight - 1} y2={clusterBottom + 4}
+                                stroke="#86efac" strokeWidth={0.9} opacity={0.45}/>
+                            </>}
+                            {/* Dashed leader from bracket midpoint to label */}
+                            <line x1={clusterMidX} y1={clusterBottom + 4} x2={lx} y2={ly - 5}
+                              stroke="#86efac" strokeWidth={0.8} opacity={0.35} strokeDasharray="2 3"/>
+                          </g>
+                        )}
+                        {renderLabel(pKey, defaultX, defaultY, name, '#86efac', 8, 'middle', { x: defaultX, y: defaultY, orientation: 'horizontal', hidden: false })}
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })}
+          </g>
+
           {/* Legend */}
-          <rect x={10} y={H-55} width={W-20} height={44} fill="rgba(20,16,12,0.55)" rx={8}/>
+          <rect x={10} y={H-55} width={W-20} height={44} fill="rgba(20,16,12,0.6)" rx={8}/>
           {Object.entries(CATEGORY_COLORS).map(([cat, color], i) => (
             <g key={cat}>
               <rect x={20 + i * 72} y={H-42} width={9} height={9} fill={color} rx={2}/>
@@ -828,6 +1121,71 @@ export default function App() {
           <textarea className="form-input" value={editData.notes || ''} onChange={e => setEditData(d => ({ ...d, notes: e.target.value }))} placeholder="Any observations..." />
         </div>
 
+        {editData.seed_id && (() => {
+          const thumbSeed = seeds.find(s => s.id === editData.seed_id);
+          if (!thumbSeed) return null;
+          return (
+            <div className="form-group">
+              <label className="form-label">Plant Thumbnail</label>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                {thumbSeed.image_url ? (
+                  <img src={thumbSeed.image_url} alt={thumbSeed.name}
+                    style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid #e8e4dd', flexShrink: 0 }}
+                    onError={e => { e.target.style.display = 'none'; }} />
+                ) : (
+                  <div style={{ width: 56, height: 56, borderRadius: 6, border: '2px dashed #e8e4dd', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌿</div>
+                )}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-secondary btn-sm" disabled={editData._thumbSearching}
+                      onClick={async () => {
+                        setEditData(d => ({ ...d, _thumbSearching: true }));
+                        const res = await api.get(`/api/seeds/image-search?q=${encodeURIComponent(thumbSeed.name)}`);
+                        if (res.image_url) {
+                          await api.patch(`/api/seeds/${thumbSeed.id}/image`, { image_url: res.image_url });
+                          setSeeds(await api.get('/api/seeds'));
+                        }
+                        setEditData(d => ({ ...d, _thumbSearching: false }));
+                      }}>
+                      {editData._thumbSearching ? 'Searching…' : '🔍 Find Image'}
+                    </button>
+                    <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', margin: 0 }}>
+                      📁 Upload
+                      <input type="file" accept="image/*" style={{ display: 'none' }}
+                        onChange={async e => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const formData = new FormData();
+                          formData.append('file', file);
+                          const res = await api.upload(`/api/seeds/${thumbSeed.id}/image`, formData);
+                          if (res.image_url) setSeeds(await api.get('/api/seeds'));
+                        }} />
+                    </label>
+                  </div>
+                  <input type="text" className="form-input"
+                    placeholder="Or paste image URL…"
+                    defaultValue={thumbSeed.image_url || ''}
+                    style={{ fontSize: 11 }}
+                    onBlur={async e => {
+                      const url = e.target.value.trim();
+                      if (url !== (thumbSeed.image_url || '')) {
+                        await api.patch(`/api/seeds/${thumbSeed.id}/image`, { image_url: url || null });
+                        setSeeds(await api.get('/api/seeds'));
+                      }
+                    }} />
+                  {thumbSeed.image_url && (
+                    <button className="btn btn-sm" style={{ background: 'none', border: 'none', color: '#8a8580', cursor: 'pointer', fontSize: 12, textAlign: 'left', padding: 0 }}
+                      onClick={async () => {
+                        await api.patch(`/api/seeds/${thumbSeed.id}/image`, { image_url: null });
+                        setSeeds(await api.get('/api/seeds'));
+                      }}>✕ Remove image</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="modal-actions">
           <button className="btn btn-secondary" onClick={() => { setShowModal(null); setModalError(null); }}>Cancel</button>
           <button className="btn btn-primary" onClick={isEdit ? handleUpdatePlanting : handleCreatePlanting}>
@@ -997,6 +1355,7 @@ export default function App() {
         _seedSku: seed.sku || '',
         _seedSpacing: seed.spacing_inches || 12,
         _seedImageUrl: seed.image_url || '',
+        _seedShortLabel: seed.short_label || '',
         _seedImageLoading: false,
       });
       setShowModal('edit-seed');
@@ -1019,6 +1378,7 @@ export default function App() {
         lot: editData._seedLot || null,
         sku: editData._seedSku || null,
         image_url: editData._seedImageUrl || null,
+        short_label: editData._seedShortLabel || null,
       });
       setShowModal(null);
       setEditData({});
@@ -1047,8 +1407,15 @@ export default function App() {
               {seeds.map(s => (
                 <tr key={s.id}>
                   <td>
-                    <span style={{ fontWeight: 500 }}>{s.name}</span>
-                    {s.organic ? <span className="badge badge-organic" style={{ marginLeft: 8 }}>OG</span> : null}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {s.image_url ? (
+                        <img src={s.image_url} alt={s.name} style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
+                      ) : (
+                        <div style={{ width: 32, height: 32, borderRadius: 4, background: catColor(s.category), opacity: 0.35, flexShrink: 0 }} />
+                      )}
+                      <span style={{ fontWeight: 500 }}>{s.name}</span>
+                      {s.organic ? <span className="badge badge-organic" style={{ marginLeft: 4 }}>OG</span> : null}
+                    </div>
                   </td>
                   <td><span className="badge badge-category" style={{ background: catColor(s.category) }}>{s.category}</span></td>
                   <td style={{ fontStyle: 'italic', fontSize: 12, color: '#8a8580' }}>{s.species}</td>
@@ -1069,6 +1436,14 @@ export default function App() {
           <div className="modal-overlay" onClick={() => setShowModal(null)}>
             <div className="modal" onClick={e => e.stopPropagation()}>
               <h3 className="modal-title">Edit Seed / Plant Variety</h3>
+              <div className="form-group">
+                <label className="form-label">Short Label for Map <span style={{ fontSize: 11, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(shown on garden map cells, keep under 8 chars)</span></label>
+                <input type="text" className="form-input" maxLength={10}
+                  value={editData._seedShortLabel || ''}
+                  onChange={e => setEditData(d => ({ ...d, _seedShortLabel: e.target.value }))}
+                  placeholder={editData._seedName ? editData._seedName.split(' ')[0].slice(0, 8) : 'e.g. Shishito'}
+                />
+              </div>
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Name</label>
@@ -1247,100 +1622,158 @@ export default function App() {
         );
       })()}
 
-      <div className="card">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Variety</th>
-              <th>Location</th>
-              <th>Started</th>
-              <th>Planted</th>
-              <th>Status</th>
-              <th>Indoor Start</th>
-              <th>Transplant</th>
-              <th>Direct Sow</th>
-              <th>Photos</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plantings.map(p => (
-              <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => openPlantingDetail(p)}>
-                <td>
-                  <span style={{ fontWeight: 500 }}>{p.seed_name}</span>
-                  {p.organic ? <span className="badge badge-organic" style={{ marginLeft: 8 }}>OG</span> : null}
-                </td>
-                <td>
-                  {(() => {
-                    const bedNames = (p.grid_structures || [])
-                      .map(sid => structures.find(s => s.id === sid)?.name || sid)
-                      .filter(Boolean);
-                    return (
-                      <div>
-                        <div style={{ fontSize: 13 }}>
-                          {bedNames.length > 0 ? bedNames.join(', ') : <span style={{ color: '#ccc' }}>—</span>}
-                        </div>
-                        {(p.placed_count > 0 || p.unplaced_count > 0) && (
-                          <div style={{ fontSize: 11, marginTop: 2 }}>
-                            {p.placed_count > 0 && <span style={{ color: '#16a34a' }}>{p.placed_count} placed</span>}
-                            {p.placed_count > 0 && p.unplaced_count > 0 && <span style={{ color: '#ccc' }}> · </span>}
-                            {p.unplaced_count > 0 && <span style={{ color: '#e8a020' }}>{p.unplaced_count} unassigned</span>}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {/* Build plantingMembersMap from mapGridCells */}
+        {(() => {
+          const plantingMembersMap = {};
+          Object.entries(mapGridCells).forEach(([sid, cells]) => {
+            cells.forEach(c => {
+              if (!c.plant_guid) return;
+              if (!plantingMembersMap[c.planting_id]) plantingMembersMap[c.planting_id] = [];
+              plantingMembersMap[c.planting_id].push({ ...c, structure_id: sid });
+            });
+          });
+          Object.values(plantingMembersMap).forEach(arr =>
+            arr.sort((a, b) => (a.short_id || '').localeCompare(b.short_id || ''))
+          );
+
+          return (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th style={{ paddingLeft: 16 }}>Variety / Plants</th>
+                  <th>Location</th>
+                  <th>Started</th>
+                  <th>Planted</th>
+                  <th>Status</th>
+                  <th>Indoor Start</th>
+                  <th>Transplant</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plantings.map(p => {
+                  const seed = seeds.find(sd => sd.id === p.seed_id);
+                  const isExpanded = expandedPlantingIds.has(p.id);
+                  const members = plantingMembersMap[p.id] || [];
+                  const bedNames = (p.grid_structures || [])
+                    .map(sid => structures.find(s => s.id === sid)?.name || sid)
+                    .filter(Boolean);
+                  const isProjected = p.transplant_date && new Date(p.transplant_date + 'T00:00:00') > new Date();
+
+                  return (
+                    <React.Fragment key={p.id}>
+                      {/* Family row */}
+                      <tr style={{ cursor: 'pointer', background: isExpanded ? '#faf8f5' : undefined }}
+                        onClick={() => openPlantingDetail(p)}>
+                        <td style={{ paddingLeft: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {/* Expand chevron */}
+                            <button
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 11, color: '#8a8580', flexShrink: 0, lineHeight: 1 }}
+                              onClick={e => {
+                                e.stopPropagation();
+                                setExpandedPlantingIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
+                                  return next;
+                                });
+                              }}
+                              title={isExpanded ? 'Collapse' : `Expand (${members.length} plants)`}>
+                              {isExpanded ? '▼' : '▶'}
+                            </button>
+                            {seed?.image_url ? (
+                              <img src={seed.image_url} alt={p.seed_name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
+                            ) : (
+                              <div style={{ width: 28, height: 28, borderRadius: 4, background: catColor(p.category), opacity: 0.35, flexShrink: 0 }} />
+                            )}
+                            <div>
+                              <div style={{ fontWeight: 500, fontSize: 13 }}>{p.seed_name}</div>
+                              {members.length > 0 && (
+                                <div style={{ fontSize: 11, color: '#8a8580' }}>{members.length} individual plants</div>
+                              )}
+                            </div>
+                            {p.organic ? <span className="badge badge-organic" style={{ marginLeft: 4 }}>OG</span> : null}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </td>
-                <td onClick={e => e.stopPropagation()}>
-                  <input
-                    type="number" min="0"
-                    value={p.qty_started ?? ''}
-                    placeholder="—"
-                    onChange={async e => {
-                      await api.put(`/api/plantings/${p.id}`, { qty_started: parseInt(e.target.value) || null });
-                      loadData();
-                    }}
-                    style={{ width: 52, padding: '2px 6px', border: '1px solid #e8e4dd', borderRadius: 6, fontSize: 13, textAlign: 'center' }}
-                  />
-                </td>
-                <td onClick={e => e.stopPropagation()}>
-                  {(() => {
-                    const isProjected = p.transplant_date && new Date(p.transplant_date + 'T00:00:00') > new Date();
-                    return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <input
-                          type="number" min="0"
-                          value={p.qty_planted ?? ''}
-                          placeholder="—"
-                          onChange={async e => {
-                            await api.put(`/api/plantings/${p.id}`, { qty_planted: parseInt(e.target.value) || null });
-                            loadData();
-                          }}
-                          style={{ width: 52, padding: '2px 6px', border: `1px solid ${isProjected ? '#fbbf24' : '#e8e4dd'}`, borderRadius: 6, fontSize: 13, textAlign: 'center', background: isProjected ? '#fffbeb' : '#fff' }}
-                        />
-                        {isProjected && <span title="Projected — transplant date in future" style={{ fontSize: 11, color: '#d97706' }}>proj.</span>}
-                      </div>
-                    );
-                  })()}
-                </td>
-                <td>
-                  <span className="status-dot" style={{ background: statusColor(p.status) }}></span>
-                  <span style={{ fontSize: 13 }}>{STATUS_LABELS[p.status] || p.status}</span>
-                </td>
-                <td style={{ fontSize: 13 }}>{formatDate(p.indoor_start_date)}</td>
-                <td style={{ fontSize: 13 }}>{formatDate(p.transplant_date)}</td>
-                <td style={{ fontSize: 13 }}>{formatDate(p.direct_sow_date)}</td>
-                <td>{p.photo_count > 0 ? `📷 ${p.photo_count}` : ''}</td>
-                <td>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleDuplicatePlanting(p.id); }}>Duplicate</button>
-                    <button className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); handleDeletePlanting(p.id); }}>Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                        </td>
+                        <td>
+                          <div style={{ fontSize: 13 }}>
+                            {bedNames.length > 0 ? bedNames.join(', ') : <span style={{ color: '#ccc' }}>—</span>}
+                          </div>
+                          {(p.placed_count > 0 || p.unplaced_count > 0) && (
+                            <div style={{ fontSize: 11, marginTop: 2 }}>
+                              {p.placed_count > 0 && <span style={{ color: '#16a34a' }}>{p.placed_count} placed</span>}
+                              {p.placed_count > 0 && p.unplaced_count > 0 && <span style={{ color: '#ccc' }}> · </span>}
+                              {p.unplaced_count > 0 && <span style={{ color: '#e8a020' }}>{p.unplaced_count} unassigned</span>}
+                            </div>
+                          )}
+                        </td>
+                        <td onClick={e => e.stopPropagation()}>
+                          <input type="number" min="0" value={p.qty_started ?? ''} placeholder="—"
+                            onChange={async e => { await api.put(`/api/plantings/${p.id}`, { qty_started: parseInt(e.target.value) || null }); loadData(); }}
+                            style={{ width: 52, padding: '2px 6px', border: '1px solid #e8e4dd', borderRadius: 6, fontSize: 13, textAlign: 'center' }}
+                          />
+                        </td>
+                        <td onClick={e => e.stopPropagation()}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input type="number" min="0" value={p.qty_planted ?? ''} placeholder="—"
+                              onChange={async e => { await api.put(`/api/plantings/${p.id}`, { qty_planted: parseInt(e.target.value) || null }); loadData(); }}
+                              style={{ width: 52, padding: '2px 6px', border: `1px solid ${isProjected ? '#fbbf24' : '#e8e4dd'}`, borderRadius: 6, fontSize: 13, textAlign: 'center', background: isProjected ? '#fffbeb' : '#fff' }}
+                            />
+                            {isProjected && <span style={{ fontSize: 11, color: '#d97706' }}>proj.</span>}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="status-dot" style={{ background: statusColor(p.status) }}></span>
+                          <span style={{ fontSize: 13 }}>{STATUS_LABELS[p.status] || p.status}</span>
+                        </td>
+                        <td style={{ fontSize: 13 }}>{formatDate(p.indoor_start_date)}</td>
+                        <td style={{ fontSize: 13 }}>{formatDate(p.transplant_date)}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); handleDuplicatePlanting(p.id); }}>Dup</button>
+                            <button className="btn btn-danger btn-sm" onClick={e => { e.stopPropagation(); handleDeletePlanting(p.id); }}>Del</button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Individual plant rows */}
+                      {isExpanded && members.map(m => {
+                        const stName = structures.find(s => s.id === m.structure_id)?.name;
+                        const sColor = plantStatusColor(m.plant_status);
+                        return (
+                          <tr key={m.plant_guid}
+                            style={{ background: '#f8f7f5', cursor: 'pointer' }}
+                            onClick={() => openPlantPanel(m.plant_guid)}>
+                            <td style={{ paddingLeft: 52 }} colSpan={1}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span className="plant-short-id" style={{ background: sColor + '20', color: sColor }}>{m.short_id}</span>
+                                <span style={{ fontSize: 12, color: '#8a8580' }}>
+                                  {m.plant_status !== 'healthy' && (
+                                    <span style={{ color: sColor, fontWeight: 500, marginRight: 6 }}>
+                                      {PLANT_STATUSES.find(x => x.value === m.plant_status)?.label}
+                                    </span>
+                                  )}
+                                  {m.plant_notes ? m.plant_notes.slice(0, 40) + (m.plant_notes.length > 40 ? '…' : '') : ''}
+                                </span>
+                              </div>
+                            </td>
+                            <td colSpan={1} style={{ fontSize: 12, color: '#8a8580' }}>
+                              {stName && stName !== bedNames[0] ? stName : ''}
+                            </td>
+                            <td colSpan={6} style={{ fontSize: 12, color: '#a8a399' }}>
+                              row {m.row}, col {m.col}{m.label_visible ? '' : ' · label hidden'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          );
+        })()}
         {plantings.length === 0 && (
           <div className="empty">
             <div className="empty-icon">🌱</div>
@@ -1381,15 +1814,37 @@ export default function App() {
           <h1 className="page-title">Garden Map</h1>
           <p className="page-sub" style={{ marginBottom: 0 }}>Click any bed or box to open the planner</p>
         </div>
-        <button
-          className="btn btn-secondary"
-          style={{ marginBottom: 24, background: showMapThumbs ? '#2d2a24' : undefined, color: showMapThumbs ? '#e8c56d' : undefined }}
-          onClick={() => setShowMapThumbs(v => !v)}
-        >
-          {showMapThumbs ? '🖼️ Thumbnails On' : '🎨 Show Thumbnails'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 24 }}>
+          <button
+            className="btn btn-secondary"
+            style={{ background: mapEditMode ? '#2d2a24' : undefined, color: mapEditMode ? '#e8c56d' : undefined }}
+            onClick={() => setMapEditMode(v => !v)}
+          >
+            {mapEditMode ? '✏️ Edit Mode' : '👁 View Mode'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            style={{ background: showMapThumbs ? '#2d2a24' : undefined, color: showMapThumbs ? '#e8c56d' : undefined }}
+            onClick={() => setShowMapThumbs(v => !v)}
+          >
+            {showMapThumbs ? '🖼️ Photos On' : '🎨 Show Photos'}
+          </button>
+          <button className="btn btn-secondary" onClick={() => setMapZoom(z => Math.min(z + 0.25, 2.5))} style={{ padding: '6px 12px', fontWeight: 700 }}>＋</button>
+          <span style={{ fontSize: 12, color: '#8a8580', minWidth: 36, textAlign: 'center' }}>{Math.round(mapZoom * 100)}%</span>
+          <button className="btn btn-secondary" onClick={() => setMapZoom(z => Math.max(z - 0.25, 0.5))} style={{ padding: '6px 12px', fontWeight: 700 }}>－</button>
+          {isDirtyLabels && (
+            <button className="btn btn-primary" onClick={async () => {
+              const positions = Object.entries(labelPositions).map(([key, pos]) => {
+                const colonIdx = key.indexOf(':');
+                return { entity_type: key.slice(0, colonIdx), entity_id: key.slice(colonIdx + 1), label_x: pos.x, label_y: pos.y, orientation: pos.orientation || 'horizontal', hidden: !!pos.hidden, label_text: pos.label_text || null };
+              });
+              await api.put('/api/label-positions', positions);
+              setIsDirtyLabels(false);
+            }}>Save Labels</button>
+          )}
+        </div>
       </div>
-      <div className="grid-2">
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
         <div>{renderGardenMap()}</div>
         <div className="card">
           <h3 className="card-title" style={{ marginBottom: 16 }}>Structure Summary</h3>
@@ -1558,10 +2013,11 @@ export default function App() {
                                 outline: isActive ? '2px solid #e8c56d' : 'none',
                                 transition: 'outline 0.1s',
                               }}
-                              title={cell ? `${cell.seed_name}` : `Empty`}
+                              title={cell ? `${cell.short_id || ''} ${cell.seed_name}` : `Empty`}
                               onMouseDown={() => { setIsDragging(true); handleCellPaint(r, c); }}
                               onMouseEnter={() => handleCellDrag(r, c)}
                               onMouseUp={() => { setIsDragging(false); loadData(); }}
+                              onDoubleClick={e => { e.stopPropagation(); if (!activePaintPlanting && cell?.plant_guid) openPlantPanel(cell.plant_guid); }}
                             >
                               {cell && useThumb && (
                                 <div style={{ position: 'absolute', inset: 0, background: catColor(cell.category), opacity: 0.45 }} />
@@ -1688,6 +2144,203 @@ export default function App() {
       </div>
     );
   };
+
+  const PLANT_STATUSES = [
+    { value: 'healthy',       label: 'Healthy',        color: '#16a34a' },
+    { value: 'struggling',    label: 'Struggling',     color: '#f59e0b' },
+    { value: 'dead',          label: 'Dead',           color: '#6b7280' },
+    { value: 'harvested-out', label: 'Harvested Out',  color: '#7c3aed' },
+  ];
+
+  const plantStatusColor = (s) => {
+    const found = PLANT_STATUSES.find(x => x.value === s);
+    return found ? found.color : '#9ca3af';
+  };
+
+  const renderPlantPanel = () => (
+    <div className={`plant-panel ${selectedPlantGuid ? 'open' : ''}`}>
+      <div className="plant-panel-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontFamily: 'Fraunces, serif', fontSize: 20, fontWeight: 600 }}>
+              {plantDetail?.short_id || (plantPanelLoading ? '…' : '—')}
+            </div>
+            <div style={{ fontSize: 13, color: '#8a8580', marginTop: 2 }}>
+              {plantDetail?.seed_name}
+              {plantDetail?.structure_name && <span style={{ color: '#ccc' }}> · {plantDetail.structure_name}</span>}
+            </div>
+          </div>
+          <button onClick={closePlantPanel}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#8a8580', lineHeight: 1, padding: '0 0 0 12px' }}>✕</button>
+        </div>
+      </div>
+
+      {plantPanelLoading && (
+        <div style={{ padding: 28, color: '#8a8580', textAlign: 'center', fontSize: 13 }}>Loading plant details…</div>
+      )}
+
+      {!plantPanelLoading && plantDetail && (
+        <>
+          {/* ── This Plant ── */}
+          <div className="plant-section-header individual">This Plant</div>
+          <div className="plant-section-body">
+            {/* Map label (short_label on the seed) */}
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <div className="form-label">Map Label <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>(shared with all {plantDetail.seed_name} plants)</span></div>
+              <input type="text" className="form-input" maxLength={10}
+                key={plantDetail.plant_guid + '-sl'}
+                defaultValue={plantDetail.short_label || ''}
+                placeholder={plantDetail.seed_name?.split(' ')[0]?.slice(0, 8) || 'e.g. Shishito'}
+                onBlur={async e => {
+                  const val = e.target.value.trim() || null;
+                  await api.patch(`/api/seeds/${plantDetail.seed_id}/label`, { short_label: val });
+                  setPlantDetail(d => ({ ...d, short_label: val }));
+                  await refreshPlantMapCells(plantDetail.structure_id);
+                }}
+              />
+            </div>
+            {/* Health status */}
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <div className="form-label">Health Status</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {PLANT_STATUSES.map(s => (
+                  <span key={s.value}
+                    className={`status-pill ${plantDetail.plant_status === s.value ? 'active' : ''}`}
+                    style={{ background: s.color + '20', color: s.color }}
+                    onClick={async () => {
+                      await api.patch(`/api/plants/${plantDetail.plant_guid}`, { plant_status: s.value });
+                      setPlantDetail(d => ({ ...d, plant_status: s.value }));
+                    }}>
+                    {s.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Individual notes */}
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <div className="form-label">Notes for this plant</div>
+              <textarea className="form-input" style={{ minHeight: 64, fontSize: 13 }}
+                key={plantDetail.plant_guid}
+                defaultValue={plantDetail.plant_notes || ''}
+                onBlur={async e => {
+                  const val = e.target.value;
+                  await api.patch(`/api/plants/${plantDetail.plant_guid}`, { plant_notes: val });
+                  setPlantDetail(d => ({ ...d, plant_notes: val }));
+                }}
+                placeholder="Observations specific to this plant…"
+              />
+            </div>
+
+            {/* Label visibility */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, fontSize: 13 }}>
+              <input type="checkbox"
+                id="hide-label"
+                checked={!plantDetail.label_visible}
+                onChange={async e => {
+                  const hidden = e.target.checked;
+                  await api.patch(`/api/plants/${plantDetail.plant_guid}`, { label_visible: !hidden });
+                  setPlantDetail(d => ({ ...d, label_visible: hidden ? 0 : 1 }));
+                  await refreshPlantMapCells(plantDetail.structure_id);
+                }}
+              />
+              <label htmlFor="hide-label" style={{ cursor: 'pointer', color: '#8a8580', fontSize: 12 }}>
+                Hide label on map
+              </label>
+            </div>
+
+            {/* Photos */}
+            <div className="form-group" style={{ marginBottom: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div className="form-label" style={{ marginBottom: 0 }}>Photos</div>
+                <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', margin: 0 }}>
+                  + Add Photo
+                  <input type="file" accept="image/*" multiple style={{ display: 'none' }}
+                    onChange={async e => {
+                      const files = e.target.files;
+                      for (let i = 0; i < files.length; i++) {
+                        const fd = new FormData();
+                        fd.append('file', files[i]);
+                        fd.append('taken_date', new Date().toISOString().split('T')[0]);
+                        await api.upload(`/api/plants/${plantDetail.plant_guid}/photos`, fd);
+                      }
+                      const updated = await api.get(`/api/plants/${plantDetail.plant_guid}/photos`);
+                      setPlantPhotos(updated);
+                    }}
+                  />
+                </label>
+              </div>
+              {plantPhotos.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {plantPhotos.map(ph => (
+                    <div key={ph.id} style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid #e8e4dd', cursor: 'pointer' }}
+                      onClick={() => setLightboxPhoto(ph)}>
+                      <img src={`/photos/${ph.filename}`} alt={ph.caption || ''} style={{ width: '100%', height: 72, objectFit: 'cover', display: 'block' }} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: '#a8a399' }}>No photos yet.</div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Harvest Log ── */}
+          <div className="plant-section-header harvest">Harvest Log</div>
+          <div className="plant-section-body">
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <button className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setEditData({ _harvestGuid: plantDetail.plant_guid, harvest_date: new Date().toISOString().split('T')[0] });
+                  setShowModal('plant-harvest');
+                }}>+ Add Harvest</button>
+            </div>
+            {plantHarvests.length === 0 && (
+              <div style={{ fontSize: 12, color: '#a8a399', paddingBottom: 8 }}>No harvests recorded yet.</div>
+            )}
+            {plantHarvests.map(h => (
+              <div key={h.id} style={{ padding: '6px 0', borderBottom: '1px solid #f0ece6', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontWeight: 500 }}>{formatDate(h.harvest_date)}</div>
+                  {(h.weight_oz || h.count) && (
+                    <div style={{ fontSize: 11, color: '#8a8580' }}>
+                      {h.count ? `${h.count} picked` : ''}
+                      {h.count && h.weight_oz ? ' · ' : ''}
+                      {h.weight_oz ? `${h.weight_oz} oz` : ''}
+                    </div>
+                  )}
+                  {h.notes && <div style={{ fontSize: 11, color: '#8a8580' }}>{h.notes}</div>}
+                </div>
+                <button style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13, flexShrink: 0 }}
+                  onClick={async () => {
+                    await api.del(`/api/plant-harvests/${h.id}`);
+                    setPlantHarvests(prev => prev.filter(x => x.id !== h.id));
+                  }}>✕</button>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Family Notes ── */}
+          <div className="plant-section-header family">Family Notes</div>
+          <div className="plant-section-body" style={{ paddingBottom: 24 }}>
+            <div style={{ fontSize: 11, color: '#b45309', marginBottom: 8 }}>
+              Shared with all {plantDetail.seed_name} plants in this planting (#{plantDetail.planting_id})
+            </div>
+            <textarea className="form-input" style={{ minHeight: 80, fontSize: 13 }}
+              key={`family-${plantDetail.planting_id}`}
+              defaultValue={plantDetail.family_notes || ''}
+              onBlur={async e => {
+                const val = e.target.value;
+                await api.patch(`/api/plantings/${plantDetail.planting_id}/family-notes`, { notes: val });
+                setPlantDetail(d => ({ ...d, family_notes: val }));
+              }}
+              placeholder="Notes about this entire planting group…"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   const renderDetail = () => {
     if (!selectedPlanting) return null;
@@ -1862,6 +2515,59 @@ export default function App() {
         {showModal === 'edit-planting' && renderPlantingModal(true)}
         {showModal === 'event' && renderEventModal()}
         {showModal === 'photo' && renderPhotoModal()}
+
+        {showModal === 'plant-harvest' && (
+          <div className="modal-overlay" onClick={() => setShowModal(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
+              <h3 className="modal-title">Record Harvest</h3>
+              <div className="form-group">
+                <label className="form-label">Date</label>
+                <input type="date" className="form-input"
+                  value={editData.harvest_date || ''}
+                  onChange={e => setEditData(d => ({ ...d, harvest_date: e.target.value }))} />
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Count</label>
+                  <input type="number" min="0" className="form-input"
+                    value={editData._harvestCount || ''}
+                    onChange={e => setEditData(d => ({ ...d, _harvestCount: e.target.value }))}
+                    placeholder="# fruits" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Weight (oz)</label>
+                  <input type="number" step="0.1" min="0" className="form-input"
+                    value={editData._harvestOz || ''}
+                    onChange={e => setEditData(d => ({ ...d, _harvestOz: e.target.value }))}
+                    placeholder="oz" />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notes</label>
+                <textarea className="form-input"
+                  value={editData._harvestNotes || ''}
+                  onChange={e => setEditData(d => ({ ...d, _harvestNotes: e.target.value }))} />
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={() => { setShowModal(null); setEditData({}); }}>Cancel</button>
+                <button className="btn btn-primary" onClick={async () => {
+                  const guid = editData._harvestGuid;
+                  await api.post(`/api/plants/${guid}/harvests`, {
+                    harvest_date: editData.harvest_date,
+                    count: editData._harvestCount ? parseInt(editData._harvestCount) : null,
+                    weight_oz: editData._harvestOz ? parseFloat(editData._harvestOz) : null,
+                    notes: editData._harvestNotes || null,
+                  });
+                  setShowModal(null); setEditData({});
+                  const updated = await api.get(`/api/plants/${guid}/harvests`);
+                  setPlantHarvests(updated);
+                }}>Save Harvest</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {renderPlantPanel()}
 
         {lightboxPhoto && (
           <div className="lightbox" onClick={() => setLightboxPhoto(null)}>

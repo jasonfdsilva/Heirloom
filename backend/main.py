@@ -114,6 +114,28 @@ def init_db():
             taken_date TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS label_positions (
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            label_x REAL,
+            label_y REAL,
+            orientation TEXT DEFAULT 'horizontal',
+            hidden INTEGER DEFAULT 0,
+            label_text TEXT,
+            PRIMARY KEY (entity_type, entity_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS plant_harvests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plant_guid TEXT NOT NULL,
+            harvest_date TEXT NOT NULL,
+            weight_oz REAL,
+            count INTEGER,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_harvests_guid ON plant_harvests (plant_guid);
     """)
 
     # Seed initial data if empty
@@ -145,6 +167,14 @@ def init_db():
 init_db()
 
 
+def seed_prefix(seed_name: str) -> str:
+    """Derive a 2-char prefix from a seed name. e.g. 'Shishito' → 'SH', 'Sun Sugar' → 'SS'."""
+    words = seed_name.split()
+    if len(words) == 1:
+        return words[0][:2].upper()
+    return (words[0][0] + words[1][0]).upper()
+
+
 def migrate_db():
     """Add new columns to existing databases without losing data."""
     conn = get_db()
@@ -157,7 +187,80 @@ def migrate_db():
     seed_cols = [row[1] for row in conn.execute("PRAGMA table_info(seeds)").fetchall()]
     if "image_url" not in seed_cols:
         conn.execute("ALTER TABLE seeds ADD COLUMN image_url TEXT")
+    lp_cols = [row[1] for row in conn.execute("PRAGMA table_info(label_positions)").fetchall()]
+    if "orientation" not in lp_cols:
+        conn.execute("ALTER TABLE label_positions ADD COLUMN orientation TEXT DEFAULT 'horizontal'")
+    if "hidden" not in lp_cols:
+        conn.execute("ALTER TABLE label_positions ADD COLUMN hidden INTEGER DEFAULT 0")
+    if "label_text" not in lp_cols:
+        conn.execute("ALTER TABLE label_positions ADD COLUMN label_text TEXT")
+
+    # Individual plant tracking — extend grid_cells
+    gc_cols = [row[1] for row in conn.execute("PRAGMA table_info(grid_cells)").fetchall()]
+    if "plant_guid" not in gc_cols:
+        conn.execute("ALTER TABLE grid_cells ADD COLUMN plant_guid TEXT")
+    if "short_id" not in gc_cols:
+        conn.execute("ALTER TABLE grid_cells ADD COLUMN short_id TEXT")
+    if "plant_status" not in gc_cols:
+        conn.execute("ALTER TABLE grid_cells ADD COLUMN plant_status TEXT DEFAULT 'healthy'")
+    if "plant_notes" not in gc_cols:
+        conn.execute("ALTER TABLE grid_cells ADD COLUMN plant_notes TEXT")
+    if "label_visible" not in gc_cols:
+        conn.execute("ALTER TABLE grid_cells ADD COLUMN label_visible INTEGER DEFAULT 1")
+
+    # Short label for map display
+    seed_cols2 = [row[1] for row in conn.execute("PRAGMA table_info(seeds)").fetchall()]
+    if "short_label" not in seed_cols2:
+        conn.execute("ALTER TABLE seeds ADD COLUMN short_label TEXT")
+
+    # Plant-level photos
+    photo_cols = [row[1] for row in conn.execute("PRAGMA table_info(photos)").fetchall()]
+    if "plant_guid" not in photo_cols:
+        conn.execute("ALTER TABLE photos ADD COLUMN plant_guid TEXT")
+
     conn.commit()
+
+    # Backfill existing cells that have no plant_guid
+    cells_to_fill = conn.execute(
+        "SELECT id, planting_id FROM grid_cells WHERE plant_guid IS NULL ORDER BY planting_id, id"
+    ).fetchall()
+
+    if cells_to_fill:
+        # Build seed name prefix cache per planting_id
+        prefix_cache = {}
+        counter = {}  # planting_id -> next sequential number
+
+        # Find max existing short_id numbers to avoid collisions
+        existing_shorts = conn.execute(
+            "SELECT planting_id, short_id FROM grid_cells WHERE short_id IS NOT NULL"
+        ).fetchall()
+        for row in existing_shorts:
+            pid = row["planting_id"]
+            sid = row["short_id"]
+            if sid:
+                try:
+                    num = int(sid.split("-")[-1])
+                    counter[pid] = max(counter.get(pid, 0), num)
+                except ValueError:
+                    pass
+
+        for c in cells_to_fill:
+            pid = c["planting_id"]
+            if pid not in prefix_cache:
+                row = conn.execute(
+                    "SELECT s.name FROM plantings p JOIN seeds s ON p.seed_id = s.id WHERE p.id = ?",
+                    (pid,)
+                ).fetchone()
+                prefix_cache[pid] = seed_prefix(row["name"]) if row else "XX"
+            counter[pid] = counter.get(pid, 0) + 1
+            new_guid = str(uuid.uuid4())
+            new_short = f"{prefix_cache[pid]}-{counter[pid]:02d}"
+            conn.execute(
+                "UPDATE grid_cells SET plant_guid = ?, short_id = ? WHERE id = ?",
+                (new_guid, new_short, c["id"])
+            )
+        conn.commit()
+
     conn.close()
 
 migrate_db()
@@ -201,6 +304,23 @@ class EventCreate(BaseModel):
     product_used: Optional[str] = None
 
 
+class PlantUpdate(BaseModel):
+    plant_status: Optional[str] = None
+    plant_notes: Optional[str] = None
+    label_visible: Optional[bool] = None
+
+
+class FamilyNotesUpdate(BaseModel):
+    notes: Optional[str] = None
+
+
+class HarvestCreate(BaseModel):
+    harvest_date: str
+    weight_oz: Optional[float] = None
+    count: Optional[int] = None
+    notes: Optional[str] = None
+
+
 class SeedCreate(BaseModel):
     name: str
     category: str
@@ -218,6 +338,7 @@ class SeedCreate(BaseModel):
     suggested_indoor_weeks: int = 0
     spacing_inches: int = 12
     image_url: Optional[str] = None
+    short_label: Optional[str] = None
 
 
 # ── API Routes ────────────────────────────────────────────────────────────────
@@ -244,12 +365,12 @@ def create_seed(data: SeedCreate):
     conn.execute(
         """INSERT INTO seeds (id, name, variety, category, species, days_to_maturity,
            germ_rate, lot, sku, organic, supplier, min_seeds, start_indoors, direct_sow,
-           suggested_indoor_weeks, spacing_inches, image_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           suggested_indoor_weeks, spacing_inches, image_url, short_label) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (seed_id, data.name, data.variety or data.name, data.category, data.species,
          data.days_to_maturity, data.germ_rate, data.lot, data.sku,
          1 if data.organic else 0, data.supplier, data.min_seeds,
          1 if data.start_indoors else 0, 1 if data.direct_sow else 0,
-         data.suggested_indoor_weeks, data.spacing_inches, data.image_url)
+         data.suggested_indoor_weeks, data.spacing_inches, data.image_url, data.short_label)
     )
     conn.commit()
     conn.close()
@@ -266,17 +387,26 @@ def update_seed(seed_id: str, data: SeedCreate):
     conn.execute(
         """UPDATE seeds SET name=?, variety=?, category=?, species=?, days_to_maturity=?,
            germ_rate=?, lot=?, sku=?, organic=?, supplier=?, min_seeds=?,
-           start_indoors=?, direct_sow=?, suggested_indoor_weeks=?, spacing_inches=?, image_url=?
+           start_indoors=?, direct_sow=?, suggested_indoor_weeks=?, spacing_inches=?, image_url=?, short_label=?
            WHERE id=?""",
         (data.name, data.variety or data.name, data.category, data.species,
          data.days_to_maturity, data.germ_rate, data.lot, data.sku,
          1 if data.organic else 0, data.supplier, data.min_seeds,
          1 if data.start_indoors else 0, 1 if data.direct_sow else 0,
-         data.suggested_indoor_weeks, data.spacing_inches, data.image_url, seed_id)
+         data.suggested_indoor_weeks, data.spacing_inches, data.image_url, data.short_label, seed_id)
     )
     conn.commit()
     conn.close()
     return {"message": "Seed updated"}
+
+
+@app.patch("/api/seeds/{seed_id}/label")
+def patch_seed_label(seed_id: int, data: dict):
+    conn = get_db()
+    conn.execute("UPDATE seeds SET short_label=? WHERE id=?", (data.get("short_label"), seed_id))
+    conn.commit()
+    conn.close()
+    return {"message": "Label updated"}
 
 
 def _wikipedia_image(query: str) -> Optional[str]:
@@ -509,8 +639,9 @@ def delete_event(event_id: int):
 def get_grid(structure_id: str):
     conn = get_db()
     rows = conn.execute("""
-        SELECT gc.row, gc.col, gc.planting_id, p.seed_id, s.name as seed_name,
-               s.category, s.spacing_inches
+        SELECT gc.row, gc.col, gc.planting_id, gc.plant_guid, gc.short_id,
+               gc.plant_status, gc.plant_notes, gc.label_visible,
+               p.seed_id, s.name as seed_name, s.short_label, s.category, s.spacing_inches
         FROM grid_cells gc
         JOIN plantings p ON gc.planting_id = p.id
         JOIN seeds s ON p.seed_id = s.id
@@ -528,19 +659,49 @@ class GridUpdate(BaseModel):
 @app.post("/api/structures/{structure_id}/grid")
 def update_grid(structure_id: str, data: GridUpdate):
     conn = get_db()
+    # Derive seed name prefix once for this planting
+    row_seed = conn.execute(
+        "SELECT s.name FROM plantings p JOIN seeds s ON p.seed_id = s.id WHERE p.id = ?",
+        (data.planting_id,)
+    ).fetchone()
+    prefix = seed_prefix(row_seed["name"]) if row_seed else "XX"
+
     for cell in data.cells:
+        existing = conn.execute(
+            "SELECT id, planting_id, plant_guid FROM grid_cells WHERE structure_id = ? AND row = ? AND col = ?",
+            (structure_id, cell["row"], cell["col"])
+        ).fetchone()
+
+        if existing and existing["planting_id"] == data.planting_id:
+            # Same planting repainting same cell — preserve existing identity
+            continue
+
+        # New cell or different planting taking over — assign fresh identity
+        count = conn.execute(
+            "SELECT COUNT(*) FROM grid_cells WHERE planting_id = ? AND plant_guid IS NOT NULL",
+            (data.planting_id,)
+        ).fetchone()[0]
+        new_guid = str(uuid.uuid4())
+        new_short = f"{prefix}-{count + 1:02d}"
+
         try:
             conn.execute(
-                """INSERT OR REPLACE INTO grid_cells (planting_id, structure_id, row, col)
-                   VALUES (?,?,?,?)""",
-                (data.planting_id, structure_id, cell["row"], cell["col"])
+                """INSERT INTO grid_cells (planting_id, structure_id, row, col, plant_guid, short_id, plant_status, label_visible)
+                   VALUES (?,?,?,?,?,?,'healthy',1)
+                   ON CONFLICT(structure_id, row, col) DO UPDATE SET
+                       planting_id=excluded.planting_id,
+                       plant_guid=excluded.plant_guid,
+                       short_id=excluded.short_id,
+                       plant_status='healthy',
+                       plant_notes=NULL,
+                       label_visible=1""",
+                (data.planting_id, structure_id, cell["row"], cell["col"], new_guid, new_short)
             )
         except Exception:
             pass
     conn.commit()
     conn.close()
-    total = sum(1 for cell in data.cells)
-    return {"message": "Grid updated", "cell_count": total}
+    return {"message": "Grid updated", "cell_count": len(data.cells)}
 
 
 @app.delete("/api/structures/{structure_id}/grid/cells")
@@ -562,6 +723,191 @@ def delete_grid_cells(structure_id: str, planting_id: int = Query(...), rows: st
     conn.commit()
     conn.close()
     return {"message": "Cells removed"}
+
+
+# ── Individual Plant Tracking ─────────────────────────────────────────────────
+
+@app.get("/api/plants/{plant_guid}")
+def get_plant(plant_guid: str):
+    conn = get_db()
+    row = conn.execute("""
+        SELECT gc.id as cell_id, gc.plant_guid, gc.short_id, gc.plant_status, gc.plant_notes,
+               gc.label_visible, gc.row, gc.col, gc.structure_id, gc.planting_id,
+               p.seed_id, p.status as planting_status, p.notes as family_notes,
+               p.transplant_date, p.direct_sow_date, p.first_harvest_date, p.year,
+               s.name as seed_name, s.short_label, s.category, s.variety, s.days_to_maturity, s.image_url,
+               st.name as structure_name
+        FROM grid_cells gc
+        JOIN plantings p ON gc.planting_id = p.id
+        JOIN seeds s ON p.seed_id = s.id
+        LEFT JOIN structures st ON gc.structure_id = st.id
+        WHERE gc.plant_guid = ?
+    """, (plant_guid,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Plant not found")
+    conn.close()
+    return dict(row)
+
+
+@app.patch("/api/plants/{plant_guid}")
+def update_plant(plant_guid: str, data: PlantUpdate):
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM grid_cells WHERE plant_guid = ?", (plant_guid,)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(404, "Plant not found")
+    updates, values = [], []
+    if data.plant_status is not None:
+        updates.append("plant_status = ?"); values.append(data.plant_status)
+    if data.plant_notes is not None:
+        updates.append("plant_notes = ?"); values.append(data.plant_notes)
+    if data.label_visible is not None:
+        updates.append("label_visible = ?"); values.append(1 if data.label_visible else 0)
+    if updates:
+        values.append(plant_guid)
+        conn.execute(f"UPDATE grid_cells SET {', '.join(updates)} WHERE plant_guid = ?", values)
+        conn.commit()
+    conn.close()
+    return {"message": "Plant updated"}
+
+
+@app.patch("/api/plantings/{planting_id}/family-notes")
+def update_family_notes(planting_id: int, data: FamilyNotesUpdate):
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM plantings WHERE id = ?", (planting_id,)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(404, "Planting not found")
+    conn.execute(
+        "UPDATE plantings SET notes = ?, updated_at = ? WHERE id = ?",
+        (data.notes, datetime.utcnow().isoformat(), planting_id)
+    )
+    conn.commit()
+    conn.close()
+    return {"message": "Family notes updated"}
+
+
+# ── Plant Harvests ────────────────────────────────────────────────────────────
+
+@app.get("/api/plants/{plant_guid}/harvests")
+def list_plant_harvests(plant_guid: str):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM plant_harvests WHERE plant_guid = ? ORDER BY harvest_date DESC",
+        (plant_guid,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/plants/{plant_guid}/harvests")
+def create_plant_harvest(plant_guid: str, data: HarvestCreate):
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM grid_cells WHERE plant_guid = ?", (plant_guid,)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(404, "Plant not found")
+    cursor = conn.execute(
+        "INSERT INTO plant_harvests (plant_guid, harvest_date, weight_oz, count, notes) VALUES (?,?,?,?,?)",
+        (plant_guid, data.harvest_date, data.weight_oz, data.count, data.notes)
+    )
+    conn.commit()
+    harvest_id = cursor.lastrowid
+    conn.close()
+    return {"id": harvest_id, "message": "Harvest recorded"}
+
+
+@app.delete("/api/plant-harvests/{harvest_id}")
+def delete_plant_harvest(harvest_id: int):
+    conn = get_db()
+    conn.execute("DELETE FROM plant_harvests WHERE id = ?", (harvest_id,))
+    conn.commit()
+    conn.close()
+    return {"message": "Harvest deleted"}
+
+
+# ── Plant Photos ──────────────────────────────────────────────────────────────
+
+@app.get("/api/plants/{plant_guid}/photos")
+def list_plant_photos(plant_guid: str):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM photos WHERE plant_guid = ? ORDER BY taken_date",
+        (plant_guid,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/plants/{plant_guid}/photos")
+async def upload_plant_photo(
+    plant_guid: str,
+    file: UploadFile = File(...),
+    caption: str = Form(""),
+    taken_date: str = Form("")
+):
+    conn = get_db()
+    cell = conn.execute(
+        "SELECT planting_id FROM grid_cells WHERE plant_guid = ?", (plant_guid,)
+    ).fetchone()
+    if not cell:
+        conn.close()
+        raise HTTPException(404, "Plant not found")
+    planting_id = cell["planting_id"]
+    ext = os.path.splitext(file.filename)[1].lower() if file.filename else ".jpg"
+    if ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+        ext = '.jpg'
+    filename = f"plant_{plant_guid[:8]}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(PHOTOS_DIR, filename)
+    with open(filepath, "wb") as f:
+        f.write(await file.read())
+    if not taken_date:
+        taken_date = datetime.utcnow().strftime("%Y-%m-%d")
+    cursor = conn.execute(
+        "INSERT INTO photos (planting_id, plant_guid, filename, original_name, caption, taken_date) VALUES (?,?,?,?,?,?)",
+        (planting_id, plant_guid, filename, file.filename, caption, taken_date)
+    )
+    conn.commit()
+    photo_id = cursor.lastrowid
+    conn.close()
+    return {"id": photo_id, "filename": filename, "message": "Photo uploaded"}
+
+
+# ── Seed Image Upload ─────────────────────────────────────────────────────────
+
+@app.post("/api/seeds/{seed_id}/image")
+async def upload_seed_image(seed_id: str, file: UploadFile = File(...)):
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM seeds WHERE id = ?", (seed_id,)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(404, "Seed not found")
+    ext = os.path.splitext(file.filename)[1].lower() if file.filename else ".jpg"
+    if ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+        ext = '.jpg'
+    filename = f"seed_{seed_id}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(PHOTOS_DIR, filename)
+    with open(filepath, "wb") as f:
+        f.write(await file.read())
+    image_url = f"/photos/{filename}"
+    conn.execute("UPDATE seeds SET image_url = ? WHERE id = ?", (image_url, seed_id))
+    conn.commit()
+    conn.close()
+    return {"image_url": image_url}
+
+
+class ImageUrlPatch(BaseModel):
+    image_url: Optional[str] = None
+
+
+@app.patch("/api/seeds/{seed_id}/image")
+def patch_seed_image_url(seed_id: str, data: ImageUrlPatch):
+    conn = get_db()
+    conn.execute("UPDATE seeds SET image_url = ? WHERE id = ?", (data.image_url, seed_id))
+    conn.commit()
+    conn.close()
+    return {"image_url": data.image_url}
 
 
 # ── Photos ────────────────────────────────────────────────────────────────────
@@ -625,6 +971,43 @@ def delete_photo(photo_id: int):
     return {"message": "Photo deleted"}
 
 
+# ── Label Positions ───────────────────────────────────────────────────────────
+
+@app.get("/api/label-positions")
+def get_label_positions():
+    conn = get_db()
+    rows = conn.execute("SELECT entity_type, entity_id, label_x, label_y FROM label_positions").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+class LabelPosition(BaseModel):
+    entity_type: str
+    entity_id: str
+    label_x: float
+    label_y: float
+    orientation: str = 'horizontal'
+    hidden: bool = False
+    label_text: Optional[str] = None
+
+
+@app.put("/api/label-positions")
+def save_label_positions(positions: List[LabelPosition]):
+    conn = get_db()
+    for pos in positions:
+        conn.execute("""
+            INSERT INTO label_positions (entity_type, entity_id, label_x, label_y, orientation, hidden, label_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (entity_type, entity_id) DO UPDATE SET
+                label_x=excluded.label_x, label_y=excluded.label_y,
+                orientation=excluded.orientation, hidden=excluded.hidden,
+                label_text=excluded.label_text
+        """, (pos.entity_type, pos.entity_id, pos.label_x, pos.label_y, pos.orientation, int(pos.hidden), pos.label_text))
+    conn.commit()
+    conn.close()
+    return {"message": "Saved"}
+
+
 # ── Export / Import ───────────────────────────────────────────────────────────
 
 @app.get("/api/export")
@@ -638,6 +1021,7 @@ def export_data():
         "events": [dict(r) for r in conn.execute("SELECT * FROM planting_events").fetchall()],
         "photos": [dict(r) for r in conn.execute("SELECT * FROM photos").fetchall()],
         "grid_cells": [dict(r) for r in conn.execute("SELECT * FROM grid_cells").fetchall()],
+        "plant_harvests": [dict(r) for r in conn.execute("SELECT * FROM plant_harvests").fetchall()],
     }
     conn.close()
     return JSONResponse(content=data)
@@ -651,6 +1035,7 @@ async def import_data(file: UploadFile = File(...)):
 
     # Clear existing data
     conn.executescript("""
+        DELETE FROM plant_harvests;
         DELETE FROM grid_cells;
         DELETE FROM photos;
         DELETE FROM planting_events;
@@ -711,9 +1096,21 @@ async def import_data(file: UploadFile = File(...)):
 
     for gc in data.get("grid_cells", []):
         conn.execute(
-            """INSERT INTO grid_cells (id, planting_id, structure_id, row, col)
-               VALUES (?,?,?,?,?)""",
-            (gc["id"], gc["planting_id"], gc["structure_id"], gc["row"], gc["col"])
+            """INSERT INTO grid_cells (id, planting_id, structure_id, row, col,
+               plant_guid, short_id, plant_status, plant_notes, label_visible)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (gc["id"], gc["planting_id"], gc["structure_id"], gc["row"], gc["col"],
+             gc.get("plant_guid"), gc.get("short_id"),
+             gc.get("plant_status", "healthy"), gc.get("plant_notes"),
+             gc.get("label_visible", 1))
+        )
+
+    for h in data.get("plant_harvests", []):
+        conn.execute(
+            """INSERT INTO plant_harvests (id, plant_guid, harvest_date, weight_oz, count, notes, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (h["id"], h["plant_guid"], h["harvest_date"], h.get("weight_oz"),
+             h.get("count"), h.get("notes"), h.get("created_at"))
         )
 
     conn.commit()

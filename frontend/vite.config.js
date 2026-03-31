@@ -5,8 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
-      '/photos': 'http://localhost:8000',
+      '/api': process.env.VITE_API_HOST || 'http://localhost:8000',
+      '/photos': process.env.VITE_API_HOST || 'http://localhost:8000',
     }
   }
 })
