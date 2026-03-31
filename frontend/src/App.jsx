@@ -652,22 +652,20 @@ export default function App() {
               const cellPxH = bedRows > 0 ? h / bedRows : h;
 
               const cells = mapGridCells[s.id] || [];
-              // Group cells by planting_id then cluster within each group
-              const byPlanting = {};
+              // Group cells by display name so same-variety plantings share a cluster label
+              const byName = {};
               cells.forEach(c => {
-                if (!byPlanting[c.planting_id]) byPlanting[c.planting_id] = [];
-                byPlanting[c.planting_id].push(c);
+                const name = c.short_label || c.seed_name;
+                if (!byName[name]) byName[name] = [];
+                byName[name].push(c);
               });
               const plantingClusters = [];
-              Object.entries(byPlanting).forEach(([pid, groupCells]) => {
-                const displayName = groupCells[0].short_label || groupCells[0].seed_name;
-                clusterCells(groupCells, 3).forEach(cluster => {
-                  const minR = Math.min(...cluster.map(c => c.row));
-                  const maxR = Math.max(...cluster.map(c => c.row));
-                  const minC = Math.min(...cluster.map(c => c.col));
-                  const maxC = Math.max(...cluster.map(c => c.col));
-                  plantingClusters.push({ pid, name: displayName, minR, maxR, minC, maxC });
-                });
+              Object.entries(byName).forEach(([name, groupCells]) => {
+                const minR = Math.min(...groupCells.map(c => c.row));
+                const maxR = Math.max(...groupCells.map(c => c.row));
+                const minC = Math.min(...groupCells.map(c => c.col));
+                const maxC = Math.max(...groupCells.map(c => c.col));
+                plantingClusters.push({ pid: name, name, minR, maxR, minC, maxC });
               });
               // Stagger labels whose column spans overlap (for below-bed placement)
               plantingClusters.forEach((cl, i) => {
@@ -825,14 +823,6 @@ export default function App() {
             })}
           </g>
 
-          {/* Legend */}
-          <rect x={10} y={H-55} width={W-20} height={44} fill="rgba(20,16,12,0.6)" rx={8}/>
-          {Object.entries(CATEGORY_COLORS).map(([cat, color], i) => (
-            <g key={cat}>
-              <rect x={20 + i * 72} y={H-42} width={9} height={9} fill={color} rx={2}/>
-              <text x={33 + i * 72} y={H-34} fill="rgba(255,255,255,0.8)" fontSize={7.5} fontFamily="DM Sans">{cat}</text>
-            </g>
-          ))}
         </svg>
       </div>
     );
