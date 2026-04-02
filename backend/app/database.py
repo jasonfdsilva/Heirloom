@@ -12,7 +12,7 @@ os.makedirs(PHOTOS_DIR, exist_ok=True)
 
 def get_db() -> Generator[sqlite3.Connection, None, None]:
     """FastAPI dependency that yields a database connection."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -24,7 +24,7 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
 
 def _raw_conn() -> sqlite3.Connection:
     """Direct connection for startup tasks (init_db, migrate_db)."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
