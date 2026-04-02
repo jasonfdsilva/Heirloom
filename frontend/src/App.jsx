@@ -1,85 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-
-// ── API helpers ──────────────────────────────────────────────────────────────
-
-const api = {
-  get: async (url) => { const r = await fetch(url); return r.json(); },
-  post: async (url, data) => {
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    return r.json();
-  },
-  put: async (url, data) => {
-    const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    return r.json();
-  },
-  del: async (url) => { const r = await fetch(url, { method: 'DELETE' }); return r.json(); },
-  patch: async (url, data) => {
-    const r = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    return r.json();
-  },
-  upload: async (url, formData) => {
-    const r = await fetch(url, { method: 'POST', body: formData });
-    return r.json();
-  }
-};
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const CATEGORY_COLORS = {
-  Peppers: '#dc2626', Herbs: '#16a34a', Greens: '#65a30d', Tomatoes: '#ea580c',
-  Beans: '#ca8a04', Brassicas: '#0891b2', Alliums: '#7c3aed',
-  Cucurbits: '#059669', 'Root Vegetables': '#b45309',
-};
-
-const STATUS_LABELS = {
-  planned: '📋 Planned', started: '🌱 Started Indoors', hardening: '🌤️ Hardening Off',
-  transplanted: '🏡 Transplanted', growing: '🌿 Growing', harvesting: '🍅 Harvesting', done: '✅ Done'
-};
-
-const EVENT_TYPES = [
-  { value: 'note', label: '📝 Note', color: '#8a8580' },
-  { value: 'germination', label: '🌱 Germination', color: '#16a34a' },
-  { value: 'fertilize', label: '🧪 Fertilize', color: '#7c3aed' },
-  { value: 'disease', label: '🦠 Disease', color: '#dc2626' },
-  { value: 'pest', label: '🐛 Pest', color: '#ea580c' },
-  { value: 'prune', label: '✂️ Prune', color: '#16a34a' },
-  { value: 'water', label: '💧 Water', color: '#0891b2' },
-  { value: 'harvest', label: '🧺 Harvest', color: '#ca8a04' },
-  { value: 'observation', label: '👁️ Observation', color: '#6b7280' },
-  { value: 'weather', label: '⛈️ Weather', color: '#4b5563' },
-];
-
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-// BFS clustering: groups cells where any two cells are within maxGap Chebyshev distance of each other
-const clusterCells = (cells, maxGap = 3) => {
-  const visited = new Set();
-  const clusters = [];
-  for (const cell of cells) {
-    const key = `${cell.row},${cell.col}`;
-    if (visited.has(key)) continue;
-    const cluster = [];
-    const queue = [cell];
-    visited.add(key);
-    while (queue.length) {
-      const cur = queue.shift();
-      cluster.push(cur);
-      for (const candidate of cells) {
-        const cKey = `${candidate.row},${candidate.col}`;
-        if (visited.has(cKey)) continue;
-        const dist = Math.max(Math.abs(candidate.row - cur.row), Math.abs(candidate.col - cur.col));
-        if (dist <= maxGap) {
-          visited.add(cKey);
-          queue.push(candidate);
-        }
-      }
-    }
-    clusters.push(cluster);
-  }
-  return clusters;
-};
+import api from './lib/api';
+import { CATEGORY_COLORS, STATUS_LABELS, EVENT_TYPES, MONTHS } from './lib/constants';
+import { catColor, statusColor } from './lib/colors';
+import { formatDate } from './lib/formatters';
+import { clusterCells, getSuggestedDates } from './lib/algorithms';
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
@@ -612,45 +536,6 @@ export default function App() {
   const totalPlanted = plantings.reduce((sum, p) => sum + (p.qty_planted || 0), 0);
   const activePlantings = plantings.filter(p => p.status !== 'done');
   const harvestingCount = plantings.filter(p => p.status === 'harvesting').reduce((sum, p) => sum + (p.qty_planted || p.qty_started || 0), 0);
-
-  // ── Suggested dates (Zone 6b, last frost April 15) ────────────────────────
-
-  const getSuggestedDates = (seed) => {
-    const lastFrost = new Date(2026, 3, 15);
-    const dates = {};
-    if (seed.start_indoors) {
-      const indoor = new Date(lastFrost);
-      indoor.setDate(indoor.getDate() - (seed.suggested_indoor_weeks || 6) * 7);
-      dates.indoor_start_date = indoor.toISOString().split('T')[0];
-      const harden = new Date(lastFrost);
-      harden.setDate(harden.getDate() - 7);
-      dates.hardening_date = harden.toISOString().split('T')[0];
-      dates.transplant_date = lastFrost.toISOString().split('T')[0];
-    }
-    if (seed.direct_sow) {
-      const sowDate = new Date(lastFrost);
-      if (['Greens', 'Root Vegetables'].includes(seed.category)) {
-        sowDate.setDate(sowDate.getDate() - 14); // cool season, sow 2 weeks before last frost
-      }
-      dates.direct_sow_date = sowDate.toISOString().split('T')[0];
-    }
-    return dates;
-  };
-
-  // ── Render helpers ────────────────────────────────────────────────────────
-
-  const catColor = (cat) => CATEGORY_COLORS[cat] || '#6b7280';
-
-  const statusColor = (status) => {
-    const map = { planned: '#9ca3af', started: '#8b5cf6', hardening: '#f59e0b', transplanted: '#3b82f6', growing: '#16a34a', harvesting: '#ea580c', done: '#6b7280' };
-    return map[status] || '#9ca3af';
-  };
-
-  const formatDate = (d) => {
-    if (!d) return '';
-    const dt = new Date(d + 'T00:00:00');
-    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
 
   // ── Garden Map SVG ────────────────────────────────────────────────────────
 
