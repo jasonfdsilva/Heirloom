@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -18,12 +19,15 @@ from backend.app.routers import (
     label_positions,
 )
 
-app = FastAPI(title="Heirloom Garden Tracker")
 
-# ── Startup ───────────────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    migrate_db()
+    yield
 
-init_db()
-migrate_db()
+
+app = FastAPI(title="Heirloom Garden Tracker", lifespan=lifespan)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 

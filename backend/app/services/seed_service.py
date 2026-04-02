@@ -50,14 +50,14 @@ def update_seed(db: sqlite3.Connection, seed_id: str, data: SeedCreate) -> dict:
         """UPDATE seeds SET name=?, variety=?, category=?, species=?, days_to_maturity=?,
            germ_rate=?, lot=?, sku=?, organic=?, supplier=?, min_seeds=?,
            start_indoors=?, direct_sow=?, suggested_indoor_weeks=?, spacing_inches=?,
-           image_url=?, short_label=?
+           image_url=?, short_label=?, notes=?
            WHERE id=?""",
         (data.name, data.variety or data.name, data.category, data.species,
          data.days_to_maturity, data.germ_rate, data.lot, data.sku,
          1 if data.organic else 0, data.supplier, data.min_seeds,
          1 if data.start_indoors else 0, 1 if data.direct_sow else 0,
          data.suggested_indoor_weeks, data.spacing_inches, data.image_url, data.short_label,
-         seed_id)
+         data.notes, seed_id)
     )
     db.commit()
     return {"message": "Seed updated"}

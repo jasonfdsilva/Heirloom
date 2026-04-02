@@ -6,8 +6,11 @@ from typing import Generator
 DB_PATH = os.getenv("DATABASE_URL", "sqlite:////app/data/heirloom.db").replace("sqlite:///", "")
 PHOTOS_DIR = os.getenv("PHOTOS_DIR", "/app/photos")
 
-os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else ".", exist_ok=True)
-os.makedirs(PHOTOS_DIR, exist_ok=True)
+try:
+    os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else ".", exist_ok=True)
+    os.makedirs(PHOTOS_DIR, exist_ok=True)
+except OSError:
+    pass  # Read-only filesystem in test/CI environments — paths created by Docker in prod
 
 
 def get_db() -> Generator[sqlite3.Connection, None, None]:

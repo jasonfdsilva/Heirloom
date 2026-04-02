@@ -20,6 +20,7 @@ class SeedCreate(BaseModel):
     spacing_inches: int = 12
     image_url: Optional[str] = None
     short_label: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class ImageUrlPatch(BaseModel):
