@@ -2162,7 +2162,7 @@ export default function App() {
                   </button>
                   <button className="btn btn-secondary btn-sm"
                     style={{ fontSize: 15, padding: '5px 10px' }}
-                    onClick={() => { setSelectedPlanting(p); setEditData({ event_date: new Date().toISOString().split('T')[0] }); setShowModal('add-event'); }}>
+                    onClick={() => { setSelectedPlanting(p); setEditData({ event_date: new Date().toISOString().split('T')[0] }); setShowModal('event'); }}>
                     📋
                   </button>
                 </div>
