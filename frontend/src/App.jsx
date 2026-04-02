@@ -37,6 +37,7 @@ const STATUS_LABELS = {
 };
 
 const EVENT_TYPES = [
+  { value: 'germination', label: '🌱 Germination', color: '#16a34a' },
   { value: 'fertilize', label: '🧪 Fertilize', color: '#7c3aed' },
   { value: 'disease', label: '🦠 Disease', color: '#dc2626' },
   { value: 'pest', label: '🐛 Pest', color: '#ea580c' },
@@ -378,7 +379,7 @@ export default function App() {
   const handleCreateEvent = async () => {
     if (!selectedPlanting) return;
     const payload = {};
-    ['event_date', 'event_type', 'details', 'severity', 'product_used'].forEach(k => {
+    ['event_date', 'event_type', 'details', 'severity', 'product_used', 'quantity'].forEach(k => {
       if (editData[k] !== undefined) payload[k] = editData[k];
     });
     await api.post(`/api/plantings/${selectedPlanting.id}/events`, payload);
@@ -1206,6 +1207,23 @@ export default function App() {
           <input type="date" className="form-input" value={editData.event_date || new Date().toISOString().split('T')[0]} onChange={e => setEditData(d => ({ ...d, event_date: e.target.value }))} />
         </div>
 
+        {editData.event_type === 'germination' && (
+          <div className="form-group">
+            <label className="form-label">Seeds Sprouted (count)</label>
+            <input type="number" min="1" className="form-input"
+              value={editData.quantity || ''}
+              onChange={e => setEditData(d => ({ ...d, quantity: parseInt(e.target.value) || null }))}
+              placeholder="e.g. 8" />
+            {selectedPlanting?.qty_started && (
+              <div style={{ fontSize: 11, color: '#8a8580', marginTop: 4 }}>
+                {editData.quantity
+                  ? `${Math.round(editData.quantity / selectedPlanting.qty_started * 100)}% of ${selectedPlanting.qty_started} started (this batch)`
+                  : `${selectedPlanting.qty_started} seeds started total`}
+              </div>
+            )}
+          </div>
+        )}
+
         {(editData.event_type === 'disease' || editData.event_type === 'pest') && (
           <div className="form-group">
             <label className="form-label">Severity</label>
@@ -1670,6 +1688,7 @@ export default function App() {
                   <th>Status</th>
                   <th>Indoor Start</th>
                   <th>Transplant</th>
+                  <th>Germ %</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1791,6 +1810,16 @@ export default function App() {
                         </td>
                         <td style={{ fontSize: 13 }}>{formatDate(p.indoor_start_date)}</td>
                         <td style={{ fontSize: 13 }}>{formatDate(p.transplant_date)}</td>
+                        <td style={{ fontSize: 13 }}>
+                          {(() => {
+                            const actual = p.actual_germ_rate;
+                            const seed = seeds.find(s => s.id === p.seed_id);
+                            const expected = seed?.germ_rate;
+                            if (actual == null) return <span style={{ color: '#c4b8a8' }}>—</span>;
+                            const color = expected == null ? '#6b7280' : actual >= expected ? '#16a34a' : actual >= expected * 0.5 ? '#d97706' : '#dc2626';
+                            return <span style={{ fontWeight: 600, color }}>{actual}%{expected != null ? <span style={{ fontWeight: 400, color: '#8a8580' }}> / {expected}%</span> : ''}</span>;
+                          })()}
+                        </td>
                         <td>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); handleDuplicatePlanting(p.id); }}>Dup</button>
@@ -2476,6 +2505,63 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* Germination log */}
+            {(() => {
+              const germEvents = (p.events || []).filter(e => e.event_type === 'germination').sort((a, b) => a.event_date.localeCompare(b.event_date));
+              const totalGerm = germEvents.reduce((s, e) => s + (e.quantity || 0), 0);
+              const seed = seeds.find(s => s.id === p.seed_id);
+              const expectedRate = seed?.germ_rate;
+              const actualRate = p.qty_started ? Math.round(totalGerm / p.qty_started * 100) : null;
+              return (
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="card-title">Germination</h3>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: new Date().toISOString().split('T')[0], event_type: 'germination' }); setShowModal('event'); }}>+ Log</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, marginBottom: germEvents.length ? 12 : 0 }}>
+                    <div style={{ flex: 1, padding: '8px 12px', background: '#faf8f5', borderRadius: 8, border: '1px solid #e8e4dd' }}>
+                      <div style={{ fontSize: 11, color: '#8a8580', marginBottom: 2 }}>Expected</div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>{expectedRate != null ? `${expectedRate}%` : '—'}</div>
+                    </div>
+                    <div style={{ flex: 1, padding: '8px 12px', background: actualRate == null ? 'transparent' : actualRate >= (expectedRate || 0) ? '#f0fdf4' : actualRate >= (expectedRate || 0) * 0.5 ? '#fffbeb' : '#fef2f2', borderRadius: 8, border: `1px solid ${actualRate == null ? '#e8e4dd' : actualRate >= (expectedRate || 0) ? '#bbf7d0' : actualRate >= (expectedRate || 0) * 0.5 ? '#fde68a' : '#fecaca'}` }}>
+                      <div style={{ fontSize: 11, color: '#8a8580', marginBottom: 2 }}>Actual</div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>{actualRate != null ? `${actualRate}%` : '—'}</div>
+                      {totalGerm > 0 && <div style={{ fontSize: 11, color: '#8a8580' }}>{totalGerm} of {p.qty_started || '?'} sprouted</div>}
+                    </div>
+                  </div>
+                  {germEvents.length > 0 && (
+                    <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #e8e4dd' }}>
+                          <th style={{ textAlign: 'left', padding: '4px 0', color: '#8a8580', fontWeight: 500 }}>Date</th>
+                          <th style={{ textAlign: 'right', padding: '4px 0', color: '#8a8580', fontWeight: 500 }}>Sprouted</th>
+                          <th style={{ textAlign: 'right', padding: '4px 0', color: '#8a8580', fontWeight: 500 }}>Cumulative %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {germEvents.reduce((acc, ev) => {
+                          const running = (acc.running || 0) + (ev.quantity || 0);
+                          const pct = p.qty_started ? Math.round(running / p.qty_started * 100) : null;
+                          acc.rows.push(
+                            <tr key={ev.id} style={{ borderBottom: '1px solid #f0ede8' }}>
+                              <td style={{ padding: '5px 0' }}>{formatDate(ev.event_date)}</td>
+                              <td style={{ textAlign: 'right', padding: '5px 0' }}>{ev.quantity ?? '—'}</td>
+                              <td style={{ textAlign: 'right', padding: '5px 0', color: pct != null && pct >= (expectedRate || 0) ? '#16a34a' : '#8a8580' }}>{pct != null ? `${pct}%` : '—'}</td>
+                            </tr>
+                          );
+                          acc.running = running;
+                          return acc;
+                        }, { rows: [], running: 0 }).rows}
+                      </tbody>
+                    </table>
+                  )}
+                  {germEvents.length === 0 && (
+                    <div style={{ fontSize: 13, color: '#8a8580' }}>No germination events logged. Seeds not yet sprouted (or assumed 0%).</div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Photo timeline */}
             <div className="card">

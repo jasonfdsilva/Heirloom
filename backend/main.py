@@ -160,6 +160,11 @@ def init_db():
                 (st["id"], st["name"], st["type"], st["width"], st["length"],
                  st["map_x"], st["map_y"])
             )
+    # Idempotent migrations for columns added after initial schema
+    try:
+        conn.execute("ALTER TABLE planting_events ADD COLUMN quantity INTEGER")
+    except Exception:
+        pass  # column already exists
     conn.commit()
     conn.close()
 
@@ -302,6 +307,7 @@ class EventCreate(BaseModel):
     details: Optional[str] = None
     severity: Optional[str] = None
     product_used: Optional[str] = None
+    quantity: Optional[int] = None
 
 
 class PlantUpdate(BaseModel):
@@ -509,6 +515,12 @@ def list_plantings(year: int = 2026):
             (d["id"],)
         ).fetchall()
         d["events"] = [dict(e) for e in events]
+        # Compute actual germination rate from logged germination events
+        germ_events = [e for e in d["events"] if e["event_type"] == "germination"]
+        total_germinated = sum(e["quantity"] or 0 for e in germ_events)
+        qty_started = d.get("qty_started") or 0
+        d["actual_germ_count"] = total_germinated
+        d["actual_germ_rate"] = round(total_germinated / qty_started * 100, 1) if qty_started > 0 else None
         photo_count = conn.execute(
             "SELECT COUNT(*) FROM photos WHERE planting_id = ?", (d["id"],)
         ).fetchone()[0]
@@ -613,10 +625,10 @@ def create_event(planting_id: int, data: EventCreate):
         conn.close()
         raise HTTPException(404, "Planting not found")
     cursor = conn.execute(
-        """INSERT INTO planting_events (planting_id, event_date, event_type, details, severity, product_used)
-           VALUES (?,?,?,?,?,?)""",
+        """INSERT INTO planting_events (planting_id, event_date, event_type, details, severity, product_used, quantity)
+           VALUES (?,?,?,?,?,?,?)""",
         (planting_id, data.event_date, data.event_type, data.details,
-         data.severity, data.product_used)
+         data.severity, data.product_used, data.quantity)
     )
     conn.commit()
     event_id = cursor.lastrowid
@@ -1080,10 +1092,11 @@ async def import_data(file: UploadFile = File(...)):
     for e in data.get("events", []):
         conn.execute(
             """INSERT INTO planting_events (id, planting_id, event_date, event_type,
-               details, severity, product_used, created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
+               details, severity, product_used, quantity, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (e["id"], e["planting_id"], e["event_date"], e["event_type"],
-             e.get("details"), e.get("severity"), e.get("product_used"), e.get("created_at"))
+             e.get("details"), e.get("severity"), e.get("product_used"),
+             e.get("quantity"), e.get("created_at"))
         )
 
     for ph in data.get("photos", []):
