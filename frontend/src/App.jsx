@@ -37,6 +37,7 @@ const STATUS_LABELS = {
 };
 
 const EVENT_TYPES = [
+  { value: 'note', label: '📝 Note', color: '#8a8580' },
   { value: 'germination', label: '🌱 Germination', color: '#16a34a' },
   { value: 'fertilize', label: '🧪 Fertilize', color: '#7c3aed' },
   { value: 'disease', label: '🦠 Disease', color: '#dc2626' },
@@ -234,7 +235,7 @@ export default function App() {
   const [modalError, setModalError] = useState(null);
   const [showPlantingSummary, setShowPlantingSummary] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [lightboxPhoto, setLightboxPhoto] = useState(null);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
   const [plantingPhotos, setPlantingPhotos] = useState([]);
   const [mapHighlight, setMapHighlight] = useState(null);
   const [showMapThumbs, setShowMapThumbs] = useState(true);
@@ -282,6 +283,18 @@ export default function App() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Lightbox keyboard navigation
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const handler = (e) => {
+      if (e.key === 'ArrowRight') setLightboxIndex(i => Math.min(i + 1, plantingPhotos.length - 1));
+      if (e.key === 'ArrowLeft')  setLightboxIndex(i => Math.max(i - 1, 0));
+      if (e.key === 'Escape')     setLightboxIndex(null);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lightboxIndex, plantingPhotos.length]);
 
   const loadPhotos = async (plantingId) => {
     const photos = await api.get(`/api/plantings/${plantingId}/photos`);
@@ -1245,7 +1258,7 @@ export default function App() {
 
         <div className="form-group">
           <label className="form-label">Details</label>
-          <textarea className="form-input" value={editData.details || ''} onChange={e => setEditData(d => ({ ...d, details: e.target.value }))} placeholder="What happened..." />
+          <textarea className="form-input" value={editData.details || ''} onChange={e => setEditData(d => ({ ...d, details: e.target.value }))} placeholder={editData.event_type === 'note' ? "What's on your mind…" : "What happened..."} />
         </div>
 
         <div className="modal-actions">
@@ -2441,6 +2454,20 @@ export default function App() {
     const p = selectedPlanting;
     const seed = seeds.find(s => s.id === p.seed_id);
 
+    // Build unified chronological timeline
+    const MILESTONES = [
+      { key: 'indoor_start_date',  label: '🏠 Started Indoors', color: '#7c3aed' },
+      { key: 'hardening_date',     label: '🌤️ Hardening Off',   color: '#f59e0b' },
+      { key: 'transplant_date',    label: '🏡 Transplanted',     color: '#16a34a' },
+      { key: 'direct_sow_date',    label: '🌿 Direct Sowed',     color: '#059669' },
+      { key: 'first_harvest_date', label: '🍅 First Harvest',    color: '#ca8a04' },
+    ];
+    const timelineEntries = [
+      ...MILESTONES.filter(m => p[m.key]).map(m => ({ type: 'milestone', date: p[m.key], label: m.label, color: m.color })),
+      ...(p.events || []).map(ev => ({ type: 'event', date: ev.event_date, ev })),
+      ...plantingPhotos.map((photo, idx) => ({ type: 'photo', date: photo.taken_date, photo, idx })),
+    ].filter(e => e.date).sort((a, b) => a.date.localeCompare(b.date));
+
     return (
       <div>
         <button className="btn btn-secondary" style={{ marginBottom: 16 }} onClick={() => setView('plantings')}>← Back to Plantings</button>
@@ -2563,60 +2590,81 @@ export default function App() {
               );
             })()}
 
-            {/* Photo timeline */}
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Photo Timeline</h3>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowModal('photo')}>+ Add Photo</button>
-              </div>
-              {plantingPhotos.length > 0 ? (
-                <div className="photo-grid">
-                  {plantingPhotos.map(photo => (
-                    <div key={photo.id} className="photo-card" onClick={() => setLightboxPhoto(photo)}>
-                      <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} />
-                      <div className="photo-card-info">
-                        <div>{formatDate(photo.taken_date)}</div>
-                        {photo.caption && <div style={{ color: '#2d2a24', fontSize: 12, marginTop: 2 }}>{photo.caption}</div>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty" style={{ padding: '24px' }}>
-                  <div className="empty-icon">📷</div>
-                  <p>No photos yet. Upload photos to track growth progress.</p>
-                </div>
-              )}
-            </div>
           </div>
 
-          {/* Event timeline sidebar */}
+          {/* Unified Timeline sidebar */}
           <div>
             <div className="card">
               <div className="card-header">
-                <h3 className="card-title">Event Log</h3>
-                <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: new Date().toISOString().split('T')[0] }); setShowModal('event'); }}>+ Log</button>
-              </div>
-              {(p.events || []).length > 0 ? (
-                (p.events || []).map(ev => {
-                  const evType = EVENT_TYPES.find(t => t.value === ev.event_type);
-                  return (
-                    <div key={ev.id} className="timeline-item">
-                      <div className="timeline-dot" style={{ background: evType?.color || '#6b7280' }}></div>
-                      <div style={{ flex: 1 }}>
-                        <div className="timeline-date">{formatDate(ev.event_date)}</div>
-                        <div style={{ fontWeight: 500, fontSize: 13 }}>{evType?.label || ev.event_type}</div>
-                        {ev.details && <div className="timeline-detail">{ev.details}</div>}
-                        {ev.product_used && <div style={{ fontSize: 11, color: '#8a8580', marginTop: 2 }}>Product: {ev.product_used}</div>}
-                        {ev.severity && <div style={{ fontSize: 11, color: ev.severity === 'high' ? '#dc2626' : ev.severity === 'medium' ? '#f59e0b' : '#16a34a', marginTop: 2 }}>Severity: {ev.severity}</div>}
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="empty" style={{ padding: '16px' }}>
-                  <p style={{ fontSize: 13 }}>No events logged yet.</p>
+                <h3 className="card-title">Timeline</h3>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setShowModal('photo')}>📷</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: new Date().toISOString().split('T')[0] }); setShowModal('event'); }}>+ Log</button>
                 </div>
+              </div>
+              {timelineEntries.length === 0 ? (
+                <div className="empty" style={{ padding: '16px' }}>
+                  <p style={{ fontSize: 13 }}>No events yet. Log an event or add a photo to start your timeline.</p>
+                </div>
+              ) : (
+                timelineEntries.map((entry, i) => {
+                  if (entry.type === 'milestone') {
+                    return (
+                      <div key={`m-${entry.date}-${i}`} className="timeline-item">
+                        <div style={{ width: 12, height: 12, borderRadius: 2, background: entry.color, transform: 'rotate(45deg)', marginTop: 3, flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                          <div className="timeline-date">{formatDate(entry.date)}</div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{entry.label}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (entry.type === 'event') {
+                    const ev = entry.ev;
+                    const evType = EVENT_TYPES.find(t => t.value === ev.event_type);
+                    if (ev.event_type === 'note') {
+                      return (
+                        <div key={`ev-${ev.id}`} className="timeline-item">
+                          <div className="timeline-dot" style={{ background: '#c4b8a8' }} />
+                          <div style={{ flex: 1 }}>
+                            <div className="timeline-date">{formatDate(ev.event_date)}</div>
+                            <div style={{ fontSize: 13, color: '#4a4540', fontStyle: 'italic' }}>{ev.details}</div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={`ev-${ev.id}`} className="timeline-item">
+                        <div className="timeline-dot" style={{ background: evType?.color || '#6b7280' }} />
+                        <div style={{ flex: 1 }}>
+                          <div className="timeline-date">{formatDate(ev.event_date)}</div>
+                          <div style={{ fontWeight: 500, fontSize: 13 }}>{evType?.label || ev.event_type}</div>
+                          {ev.quantity != null && ev.event_type === 'germination' && <div style={{ fontSize: 11, color: '#8a8580' }}>{ev.quantity} sprouted</div>}
+                          {ev.details && <div className="timeline-detail">{ev.details}</div>}
+                          {ev.product_used && <div style={{ fontSize: 11, color: '#8a8580', marginTop: 2 }}>Product: {ev.product_used}</div>}
+                          {ev.severity && <div style={{ fontSize: 11, color: ev.severity === 'high' ? '#dc2626' : ev.severity === 'medium' ? '#f59e0b' : '#16a34a', marginTop: 2 }}>Severity: {ev.severity}</div>}
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (entry.type === 'photo') {
+                    return (
+                      <div key={`ph-${entry.photo.id}`} className="timeline-item" style={{ alignItems: 'flex-start' }}>
+                        <div className="timeline-dot" style={{ background: '#8a8580', marginTop: 6 }} />
+                        <div style={{ flex: 1 }}>
+                          <div className="timeline-date">{formatDate(entry.photo.taken_date)}</div>
+                          <img
+                            src={`/photos/${entry.photo.filename}`}
+                            style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: '1px solid #e8e4dd', marginTop: 4 }}
+                            onClick={() => setLightboxIndex(entry.idx)}
+                          />
+                          {entry.photo.caption && <div style={{ fontSize: 11, color: '#8a8580', marginTop: 4 }}>{entry.photo.caption}</div>}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })
               )}
             </div>
           </div>
@@ -2720,14 +2768,29 @@ export default function App() {
 
         {renderPlantPanel()}
 
-        {lightboxPhoto && (
-          <div className="lightbox" onClick={() => setLightboxPhoto(null)}>
-            <img src={`/photos/${lightboxPhoto.filename}`} alt={lightboxPhoto.caption || ''} />
-            <div className="lightbox-caption">
-              {formatDate(lightboxPhoto.taken_date)}{lightboxPhoto.caption ? ` — ${lightboxPhoto.caption}` : ''}
+        {lightboxIndex !== null && plantingPhotos[lightboxIndex] && (() => {
+          const photo = plantingPhotos[lightboxIndex];
+          const total = plantingPhotos.length;
+          // Keyboard nav effect — inline via useEffect equivalent via event listener
+          return (
+            <div className="lightbox" onClick={() => setLightboxIndex(null)}>
+              {lightboxIndex > 0 && (
+                <button onClick={e => { e.stopPropagation(); setLightboxIndex(i => i - 1); }}
+                  style={{ position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+              )}
+              <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} onClick={e => e.stopPropagation()} />
+              {lightboxIndex < total - 1 && (
+                <button onClick={e => { e.stopPropagation(); setLightboxIndex(i => i + 1); }}
+                  style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+              )}
+              <div style={{ position: 'absolute', bottom: 24, textAlign: 'center' }}>
+                {photo.caption && <div className="lightbox-caption">{photo.caption}</div>}
+                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>{lightboxIndex + 1} / {total} · {formatDate(photo.taken_date)}</div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()
+        }
       </div>
     </>
   );
