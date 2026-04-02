@@ -165,6 +165,10 @@ def init_db():
         conn.execute("ALTER TABLE planting_events ADD COLUMN quantity INTEGER")
     except Exception:
         pass  # column already exists
+    try:
+        conn.execute("ALTER TABLE photos ADD COLUMN event_id INTEGER REFERENCES planting_events(id)")
+    except Exception:
+        pass  # column already exists
     conn.commit()
     conn.close()
 
@@ -636,6 +640,21 @@ def create_event(planting_id: int, data: EventCreate):
     return {"id": event_id, "message": "Event created"}
 
 
+@app.put("/api/events/{event_id}")
+def update_event(event_id: int, data: EventCreate):
+    conn = get_db()
+    conn.execute(
+        """UPDATE planting_events
+           SET event_date=?, event_type=?, details=?, severity=?, product_used=?, quantity=?
+           WHERE id=?""",
+        (data.event_date, data.event_type, data.details,
+         data.severity, data.product_used, data.quantity, event_id)
+    )
+    conn.commit()
+    conn.close()
+    return {"message": "Event updated"}
+
+
 @app.delete("/api/events/{event_id}")
 def delete_event(event_id: int):
     conn = get_db()
@@ -929,7 +948,8 @@ async def upload_photo(
     planting_id: int,
     file: UploadFile = File(...),
     caption: str = Form(""),
-    taken_date: str = Form("")
+    taken_date: str = Form(""),
+    event_id: str = Form("")
 ):
     conn = get_db()
     existing = conn.execute("SELECT id FROM plantings WHERE id = ?", (planting_id,)).fetchone()
@@ -948,10 +968,12 @@ async def upload_photo(
     if not taken_date:
         taken_date = datetime.utcnow().strftime("%Y-%m-%d")
 
+    ev_id = int(event_id) if event_id.strip().isdigit() else None
+
     cursor = conn.execute(
-        """INSERT INTO photos (planting_id, filename, original_name, caption, taken_date)
-           VALUES (?,?,?,?,?)""",
-        (planting_id, filename, file.filename, caption, taken_date)
+        """INSERT INTO photos (planting_id, filename, original_name, caption, taken_date, event_id)
+           VALUES (?,?,?,?,?,?)""",
+        (planting_id, filename, file.filename, caption, taken_date, ev_id)
     )
     conn.commit()
     photo_id = cursor.lastrowid
@@ -981,6 +1003,38 @@ def delete_photo(photo_id: int):
         conn.commit()
     conn.close()
     return {"message": "Photo deleted"}
+
+
+@app.get("/api/photos")
+def list_all_photos():
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT p.id, p.planting_id, p.plant_guid, p.filename, p.original_name,
+               p.caption, p.taken_date, p.event_id, p.created_at,
+               s.name AS seed_name, s.category
+        FROM photos p
+        LEFT JOIN plantings pl ON p.planting_id = pl.id
+        LEFT JOIN seeds s ON pl.seed_id = s.id
+        ORDER BY COALESCE(p.taken_date, '0000-00-00') DESC, p.created_at DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/dashboard/activity")
+def dashboard_activity():
+    conn = get_db()
+    events = conn.execute("""
+        SELECT e.id, e.planting_id, e.event_type, e.event_date, e.details,
+               s.name AS seed_name, s.category
+        FROM planting_events e
+        LEFT JOIN plantings pl ON e.planting_id = pl.id
+        LEFT JOIN seeds s ON pl.seed_id = s.id
+        ORDER BY e.event_date DESC, e.id DESC
+        LIMIT 20
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in events]
 
 
 # ── Label Positions ───────────────────────────────────────────────────────────

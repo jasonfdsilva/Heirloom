@@ -96,6 +96,7 @@ const styles = `
   .nav-link { color: #a8a399; padding: 16px 16px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; font-weight: 500; }
   .nav-link:hover { color: #f8f6f1; }
   .nav-link.active { color: #e8c56d; border-bottom-color: #e8c56d; }
+  .nav-links { display: flex; }
   .nav-right { margin-left: auto; display: flex; gap: 8px; }
   .nav-btn { background: #3d3a34; color: #a8a399; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
   .nav-btn:hover { background: #4d4a44; color: #f8f6f1; }
@@ -178,6 +179,29 @@ const styles = `
   .photo-card img { width: 100%; height: 120px; object-fit: cover; display: block; }
   .photo-card-info { padding: 8px; font-size: 11px; color: #8a8580; }
 
+  /* ── Photos Tab ── */
+  .photos-toggle { display: inline-flex; border: 1px solid #e8e4dd; border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
+  .photos-toggle-btn { padding: 7px 18px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: #fff; color: #8a8580; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+  .photos-toggle-btn.active { background: #2d2a24; color: #f8f6f1; }
+  .photos-group { margin-bottom: 32px; }
+  .photos-group-header { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500; color: #2d2a24; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #e8e4dd; display: flex; align-items: baseline; gap: 0; }
+  .photos-group-sub { color: #8a8580; font-size: 13px; margin-left: 8px; font-family: 'DM Sans', sans-serif; font-weight: 400; }
+  .photos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .photo-thumb { border-radius: 10px; overflow: hidden; border: 1px solid #e8e4dd; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; background: #f0ece6; }
+  .photo-thumb:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+  .photo-thumb img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .photo-thumb-info { padding: 8px 10px; font-size: 11px; color: #8a8580; line-height: 1.4; }
+  .photo-thumb-label { font-weight: 600; color: #2d2a24; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .photo-thumb-caption { color: #8a8580; font-style: italic; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── Dashboard photo strip ── */
+  .dashboard-photo-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+  .dashboard-photo-strip::-webkit-scrollbar { display: none; }
+  .dashboard-photo-item { flex: 0 0 100px; cursor: pointer; }
+  .dashboard-photo-item img { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid #e8e4dd; display: block; transition: transform 0.15s; }
+  .dashboard-photo-item img:hover { transform: translateY(-2px); }
+  .dashboard-photo-item-label { font-size: 11px; color: #8a8580; margin-top: 4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
   /* Photo lightbox */
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 300; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
   .lightbox img { max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 8px; }
@@ -192,6 +216,9 @@ const styles = `
   .timeline-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
   .timeline-date { font-size: 11px; color: #8a8580; }
   .timeline-detail { font-size: 13px; }
+  .event-row:hover .event-actions { opacity: 1 !important; }
+  /* On touch devices always show actions */
+  @media (hover: none) { .event-actions { opacity: 1 !important; } }
 
   /* Empty state */
   .empty { text-align: center; padding: 48px 24px; color: #8a8580; }
@@ -215,10 +242,66 @@ const styles = `
   .plant-member-row:hover { background: #faf8f5; }
   .plant-short-id { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; font-family: 'DM Mono', monospace; min-width: 44px; justify-content: center; }
 
-  @media (max-width: 768px) {
+  /* Mobile bottom tab bar — hidden on desktop, shown on mobile via media query */
+  .mobile-tabs {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+    background: #2d2a24; border-top: 1px solid #3d3a34;
+    height: 60px; padding-bottom: env(safe-area-inset-bottom);
+  }
+  .mobile-tab {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: #6b6660; font-size: 9px; letter-spacing: 0.5px;
+    text-transform: uppercase; gap: 3px; cursor: pointer;
+    border: none; background: none; padding: 0;
+  }
+  .mobile-tab.active { color: #e8c56d; }
+  .mobile-tab-icon { font-size: 20px; line-height: 1; }
+
+  /* Mobile planting card list — hidden on desktop */
+  .mobile-planting-list { display: none; }
+
+  /* Quick-action modal compact padding */
+  .quick-action-modal { padding: 20px 16px 28px; }
+  .quick-action-modal textarea {
+    width: 100%; min-height: 100px; font-size: 16px;
+    border: 1px solid #e8e4dd; border-radius: 8px; padding: 12px;
+    font-family: 'DM Sans', sans-serif; resize: none; display: block;
+    box-sizing: border-box;
+  }
+
+  @media (max-width: 640px) {
     .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
     .detail-layout { grid-template-columns: 1fr; }
     .cal-label { width: 100px; font-size: 10px; }
+
+    /* Nav: hide links + utility buttons, keep logo */
+    .nav-links { display: none; }
+    .nav-right  { display: none; }
+    .nav { padding: 0 16px; }
+
+    /* Bottom padding clears fixed tab bar */
+    .content { padding: 16px 12px 80px; }
+
+    /* Show mobile tab bar */
+    .mobile-tabs { display: flex; }
+
+    /* Modals become bottom sheets */
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal { border-radius: 16px 16px 0 0; max-width: 100%; }
+
+    /* Hide desktop table, show mobile cards */
+    .mobile-hide { display: none; }
+    .mobile-planting-list { display: block; }
+
+    /* Photos tab mobile */
+    .photos-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .photos-toggle { width: 100%; margin-bottom: 16px; }
+    .photos-toggle-btn { flex: 1; text-align: center; padding: 10px 0; font-size: 14px; }
+    .photos-group-header { font-size: 15px; }
+    .photo-thumb-info { padding: 5px 7px; }
+    .photo-thumb-label { font-size: 11px; }
   }
 `;
 
@@ -258,6 +341,10 @@ export default function App() {
   const [expandedPlantingIds, setExpandedPlantingIds] = useState(new Set());
   const [collapsedCategories, setCollapsedCategories] = useState(new Set());
   const [collapsedSeedCategories, setCollapsedSeedCategories] = useState(new Set());
+  const [allPhotos, setAllPhotos] = useState([]);
+  const [photosGrouping, setPhotosGrouping] = useState('time');
+  const [photosLightboxIndex, setPhotosLightboxIndex] = useState(null);
+  const [recentActivity, setRecentActivity] = useState([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -284,6 +371,13 @@ export default function App() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Refresh data whenever the user switches tabs
+  useEffect(() => {
+    if (view !== 'detail' && view !== 'bed-planner') loadData();
+    if (view === 'photos' || view === 'dashboard') loadAllPhotos();
+    if (view === 'dashboard') api.get('/api/dashboard/activity').then(setRecentActivity);
+  }, [view]);
+
   // Lightbox keyboard navigation
   useEffect(() => {
     if (lightboxIndex === null) return;
@@ -296,9 +390,26 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [lightboxIndex, plantingPhotos.length]);
 
+  // Photos tab lightbox keyboard navigation
+  useEffect(() => {
+    if (photosLightboxIndex === null) return;
+    const handler = (e) => {
+      if (e.key === 'ArrowRight') setPhotosLightboxIndex(i => Math.min(i + 1, allPhotos.length - 1));
+      if (e.key === 'ArrowLeft')  setPhotosLightboxIndex(i => Math.max(i - 1, 0));
+      if (e.key === 'Escape')     setPhotosLightboxIndex(null);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [photosLightboxIndex, allPhotos.length]);
+
   const loadPhotos = async (plantingId) => {
     const photos = await api.get(`/api/plantings/${plantingId}/photos`);
     setPlantingPhotos(photos);
+  };
+
+  const loadAllPhotos = async () => {
+    const photos = await api.get('/api/photos');
+    setAllPhotos(photos);
   };
 
   const openPlantPanel = async (plantGuid) => {
@@ -395,12 +506,49 @@ export default function App() {
     ['event_date', 'event_type', 'details', 'severity', 'product_used', 'quantity'].forEach(k => {
       if (editData[k] !== undefined) payload[k] = editData[k];
     });
-    await api.post(`/api/plantings/${selectedPlanting.id}/events`, payload);
+    let savedEventId = editData.id || null;
+    if (editData.id) {
+      await api.put(`/api/events/${editData.id}`, payload);
+    } else {
+      const res = await api.post(`/api/plantings/${selectedPlanting.id}/events`, payload);
+      savedEventId = res.id || null;
+    }
+    // Upload any photos attached to this event, linked via event_id
+    const attachedPhotos = editData._photos || [];
+    const photoDate = payload.event_date || new Date().toISOString().split('T')[0];
+    for (const file of attachedPhotos) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('taken_date', photoDate);
+      formData.append('caption', '');
+      if (savedEventId) formData.append('event_id', String(savedEventId));
+      await api.upload(`/api/plantings/${selectedPlanting.id}/photos`, formData);
+    }
+    if (attachedPhotos.length > 0) loadPhotos(selectedPlanting.id);
     setShowModal(null); setEditData({});
     loadData();
     const updated = await api.get('/api/plantings?year=2026');
     const refreshed = updated.find(p => p.id === selectedPlanting.id);
     if (refreshed) setSelectedPlanting(refreshed);
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    await api.del(`/api/events/${eventId}`);
+    loadData();
+    const updated = await api.get('/api/plantings?year=2026');
+    const refreshed = updated.find(p => p.id === selectedPlanting?.id);
+    if (refreshed) setSelectedPlanting(refreshed);
+  };
+
+  const handleDeletePhoto = async (photoId) => {
+    await api.del(`/api/photos/${photoId}`);
+    const newPhotos = plantingPhotos.filter(p => p.id !== photoId);
+    setPlantingPhotos(newPhotos);
+    if (newPhotos.length === 0) {
+      setLightboxIndex(null);
+    } else {
+      setLightboxIndex(prev => Math.min(prev, newPhotos.length - 1));
+    }
   };
 
   const handleUploadPhoto = async (e) => {
@@ -1261,9 +1409,25 @@ export default function App() {
           <textarea className="form-input" value={editData.details || ''} onChange={e => setEditData(d => ({ ...d, details: e.target.value }))} placeholder={editData.event_type === 'note' ? "What's on your mind…" : "What happened..."} />
         </div>
 
+        {!editData.id && (
+          <div className="form-group">
+            <label className="form-label">Attach Photos <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11 }}>(optional)</span></label>
+            <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', marginBottom: 6 }}>
+              📷 Choose Photos
+              <input type="file" accept="image/*" multiple style={{ display: 'none' }}
+                onChange={e => setEditData(d => ({ ...d, _photos: Array.from(e.target.files) }))} />
+            </label>
+            {editData._photos?.length > 0 && (
+              <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>
+                ✓ {editData._photos.length} photo{editData._photos.length !== 1 ? 's' : ''} selected
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="modal-actions">
           <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleCreateEvent}>Log Event</button>
+          <button className="btn btn-primary" onClick={handleCreateEvent}>{editData.id ? 'Save Changes' : 'Log Event'}</button>
         </div>
       </div>
     </div>
@@ -1356,6 +1520,72 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Recent Activity */}
+      {recentActivity.length > 0 && (() => {
+        // Group by planting_id, keep insertion order (already sorted by date DESC)
+        const groups = [];
+        const seen = {};
+        recentActivity.forEach(ev => {
+          const key = ev.planting_id ?? 'unknown';
+          if (!seen[key]) {
+            seen[key] = { seed_name: ev.seed_name || 'Unknown', category: ev.category || '', events: [] };
+            groups.push(key);
+          }
+          seen[key].events.push(ev);
+        });
+        const displayGroups = groups.slice(0, 5);
+        return (
+          <div className="card" style={{ marginTop: 24 }}>
+            <h3 className="card-title" style={{ marginBottom: 16 }}>Recent Activity</h3>
+            {displayGroups.map((key, gi) => {
+              const group = seen[key];
+              const planting = plantings.find(p => p.id === (key === 'unknown' ? null : parseInt(key)));
+              return (
+                <div key={key} style={{ marginBottom: gi < displayGroups.length - 1 ? 16 : 0, paddingBottom: gi < displayGroups.length - 1 ? 16 : 0, borderBottom: gi < displayGroups.length - 1 ? '1px solid #f0ece6' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, cursor: planting ? 'pointer' : 'default' }}
+                    onClick={() => planting && openPlantingDetail(planting)}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: catColor(group.category), display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ fontWeight: 600, fontSize: 14, color: '#2d2a24' }}>{group.seed_name}</span>
+                    {planting && <span style={{ fontSize: 12, color: '#8a8580' }}>→</span>}
+                  </div>
+                  {group.events.slice(0, 3).map(ev => {
+                    const evType = EVENT_TYPES.find(t => t.value === ev.event_type);
+                    return (
+                      <div key={ev.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0 4px 14px', fontSize: 13 }}>
+                        <span style={{ flexShrink: 0 }}>{evType ? evType.label.split(' ')[0] : '📋'}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ color: '#4a4540', fontWeight: 500 }}>{evType ? evType.label.replace(/^[^\s]+\s/, '') : ev.event_type}</span>
+                          <span style={{ color: '#8a8580', marginLeft: 6 }}>· {formatDate(ev.event_date)}</span>
+                          {ev.details && <div style={{ color: '#6b6660', fontSize: 12, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.details.slice(0, 80)}{ev.details.length > 80 ? '…' : ''}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* Recent Photos */}
+      {allPhotos.length > 0 && (
+        <div className="card" style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <h3 className="card-title" style={{ margin: 0 }}>Recent Photos</h3>
+            <button className="btn btn-secondary btn-sm" onClick={() => setView('photos')}>→ All ({allPhotos.length})</button>
+          </div>
+          <div className="dashboard-photo-strip">
+            {allPhotos.slice(0, 8).map((photo, idx) => (
+              <div key={photo.id} className="dashboard-photo-item" onClick={() => { setPhotosLightboxIndex(idx); }}>
+                <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} loading="lazy" />
+                <div className="dashboard-photo-item-label">{photo.seed_name || '—'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1675,7 +1905,7 @@ export default function App() {
         );
       })()}
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="card mobile-hide" style={{ padding: 0, overflow: 'hidden' }}>
         {/* Build plantingMembersMap from mapGridCells */}
         {(() => {
           const plantingMembersMap = {};
@@ -1888,6 +2118,59 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Mobile planting card list */}
+      <div className="mobile-planting-list">
+        {plantings.length === 0 && (
+          <div className="empty">
+            <div className="empty-icon">🌱</div>
+            <p>No plantings yet.</p>
+          </div>
+        )}
+        {[...plantings].sort((a, b) => a.category.localeCompare(b.category) || a.seed_name.localeCompare(b.seed_name)).map(p => {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const nextDate = p.transplant_date || p.direct_sow_date || p.indoor_start_date;
+          const nextIcon = p.transplant_date ? '🏡' : p.direct_sow_date ? '🌿' : '🏠';
+          return (
+            <div key={p.id} className="card" style={{ marginBottom: 10, padding: '14px 16px', cursor: 'pointer' }}
+              onClick={() => openPlantingDetail(p)}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {p.seed_name}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#8a8580', marginBottom: nextDate ? 6 : 0 }}>
+                    {p.category}{p.structure_name ? ` · ${p.structure_name}` : ''}
+                  </div>
+                  {nextDate && (
+                    <div style={{ fontSize: 12, color: nextDate < todayStr ? '#dc2626' : '#8a8580' }}>
+                      {nextIcon} {formatDate(nextDate)}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 12, flexShrink: 0 }}
+                  onClick={e => e.stopPropagation()}>
+                  <button className="btn btn-secondary btn-sm"
+                    style={{ fontSize: 15, padding: '5px 10px' }}
+                    onClick={() => { setSelectedPlanting(p); setEditData({}); setShowModal('quick-note'); }}>
+                    📝
+                  </button>
+                  <button className="btn btn-secondary btn-sm"
+                    style={{ fontSize: 15, padding: '5px 10px' }}
+                    onClick={() => { setSelectedPlanting(p); setShowModal('quick-photo'); }}>
+                    📷
+                  </button>
+                  <button className="btn btn-secondary btn-sm"
+                    style={{ fontSize: 15, padding: '5px 10px' }}
+                    onClick={() => { setSelectedPlanting(p); setEditData({ event_date: new Date().toISOString().split('T')[0] }); setShowModal('add-event'); }}>
+                    📋
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
     );
   };
@@ -1975,6 +2258,132 @@ export default function App() {
       </div>
     </div>
   );
+
+  // ── Photos Tab ───────────────────────────────────────────────────────────────
+
+  const renderPhotos = () => {
+    if (allPhotos.length === 0) {
+      return (
+        <div>
+          <h1 className="page-title">Photos</h1>
+          <p className="page-sub">All garden photos across all plantings</p>
+          <div className="empty">
+            <div className="empty-icon">📷</div>
+            <p>No photos yet. Add photos from a planting's detail view or use the 📷 button on the Plants tab.</p>
+          </div>
+        </div>
+      );
+    }
+
+    const formatMonthHeader = (yyyymm) => {
+      if (yyyymm === 'unknown') return 'Date Unknown';
+      const [year, month] = yyyymm.split('-');
+      const d = new Date(parseInt(year), parseInt(month) - 1, 1);
+      return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    };
+
+    const renderPhotoCard = (photo) => {
+      const flatIndex = allPhotos.findIndex(p => p.id === photo.id);
+      const label = photosGrouping === 'planting'
+        ? formatDate(photo.taken_date)
+        : (photo.seed_name || 'Unknown');
+      return (
+        <div key={photo.id} className="photo-thumb" onClick={() => setPhotosLightboxIndex(flatIndex)}>
+          <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} loading="lazy" />
+          <div className="photo-thumb-info">
+            {label && <div className="photo-thumb-label">{label}</div>}
+            {photo.caption && <div className="photo-thumb-caption">{photo.caption}</div>}
+          </div>
+        </div>
+      );
+    };
+
+    // Build time groups (YYYY-MM → photos[])
+    const timeGroups = (() => {
+      const map = {};
+      allPhotos.forEach(photo => {
+        const key = photo.taken_date ? photo.taken_date.substring(0, 7) : 'unknown';
+        if (!map[key]) map[key] = [];
+        map[key].push(photo);
+      });
+      return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+    })();
+
+    // Build planting groups: category → planting → photos (mirrors Plantings tab)
+    const categoryGroups = (() => {
+      // First group by planting
+      const plantingMap = {};
+      allPhotos.forEach(photo => {
+        const key = photo.planting_id ?? 'unknown';
+        if (!plantingMap[key]) plantingMap[key] = { label: photo.seed_name || 'Unknown Planting', category: photo.category || 'Other', photos: [] };
+        plantingMap[key].photos.push(photo);
+      });
+      // Then group plantings by category
+      const catMap = {};
+      Object.entries(plantingMap).forEach(([pid, group]) => {
+        const cat = group.category || 'Other';
+        if (!catMap[cat]) catMap[cat] = [];
+        catMap[cat].push({ pid, label: group.label, photos: group.photos });
+      });
+      // Sort categories alphabetically, plantings within each category alphabetically
+      return Object.entries(catMap)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([cat, plantings]) => ([cat, plantings.sort((a, b) => a.label.localeCompare(b.label))]));
+    })();
+
+    return (
+      <div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
+          <div>
+            <h1 className="page-title">Photos</h1>
+            <p className="page-sub">{allPhotos.length} photo{allPhotos.length !== 1 ? 's' : ''} across all plantings</p>
+          </div>
+          <div className="photos-toggle">
+            <button className={`photos-toggle-btn ${photosGrouping === 'time' ? 'active' : ''}`} onClick={() => setPhotosGrouping('time')}>By Time</button>
+            <button className={`photos-toggle-btn ${photosGrouping === 'planting' ? 'active' : ''}`} onClick={() => setPhotosGrouping('planting')}>By Planting</button>
+          </div>
+        </div>
+
+        {photosGrouping === 'time' && timeGroups.map(([monthKey, photos]) => (
+          <div key={monthKey} className="photos-group">
+            <div className="photos-group-header">
+              {formatMonthHeader(monthKey)}
+              <span className="photos-group-sub">{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="photos-grid">{photos.map(renderPhotoCard)}</div>
+          </div>
+        ))}
+
+        {photosGrouping === 'planting' && categoryGroups.map(([cat, plantingList]) => {
+          const color = catColor(cat);
+          const totalPhotos = plantingList.reduce((s, p) => s + p.photos.length, 0);
+          return (
+            <div key={cat} className="photos-group">
+              {/* Category header — same style as Plantings tab category rows */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: color + '14', borderRadius: 8, marginBottom: 12, borderBottom: `2px solid ${color}30` }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
+                <span style={{ fontWeight: 700, fontSize: 12, color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cat}</span>
+                <span style={{ fontSize: 12, color: '#8a8580', fontWeight: 400 }}>
+                  {plantingList.length} {plantingList.length === 1 ? 'variety' : 'varieties'} · {totalPhotos} photo{totalPhotos !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {/* Planting sub-groups within category */}
+              {plantingList.map(({ pid, label, photos }) => (
+                <div key={pid} style={{ marginBottom: 20, paddingLeft: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
+                    <span style={{ fontWeight: 600, fontSize: 14, color: '#2d2a24' }}>{label}</span>
+                    <span style={{ fontSize: 12, color: '#8a8580' }}>{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="photos-grid">{photos.map(renderPhotoCard)}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   // ── Bed Planner ──────────────────────────────────────────────────────────────
 
@@ -2462,10 +2871,20 @@ export default function App() {
       { key: 'direct_sow_date',    label: '🌿 Direct Sowed',     color: '#059669' },
       { key: 'first_harvest_date', label: '🍅 First Harvest',    color: '#ca8a04' },
     ];
+    // Photos linked to a specific event are shown inline with that event, not as standalone entries
+    const eventPhotoMap = {};
+    plantingPhotos.forEach((photo, idx) => {
+      if (photo.event_id) {
+        if (!eventPhotoMap[photo.event_id]) eventPhotoMap[photo.event_id] = [];
+        eventPhotoMap[photo.event_id].push({ photo, idx });
+      }
+    });
+    const standalonePhotos = plantingPhotos.map((photo, idx) => ({ photo, idx })).filter(({ photo }) => !photo.event_id);
+
     const timelineEntries = [
       ...MILESTONES.filter(m => p[m.key]).map(m => ({ type: 'milestone', date: p[m.key], label: m.label, color: m.color })),
       ...(p.events || []).map(ev => ({ type: 'event', date: ev.event_date, ev })),
-      ...plantingPhotos.map((photo, idx) => ({ type: 'photo', date: photo.taken_date, photo, idx })),
+      ...standalonePhotos.map(({ photo, idx }) => ({ type: 'photo', date: photo.taken_date, photo, idx })),
     ].filter(e => e.date).sort((a, b) => a.date.localeCompare(b.date));
 
     return (
@@ -2489,8 +2908,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="detail-layout">
-          <div>
+        <div>
             {/* Dates card */}
             <div className="card">
               <h3 className="card-title" style={{ marginBottom: 16 }}>Key Dates</h3>
@@ -2592,26 +3010,197 @@ export default function App() {
 
           </div>
 
-          {/* Unified Timeline sidebar */}
-          <div>
+        {/* Full-width Gantt Timeline */}
+        {(() => {
+          const today = new Date().toISOString().split('T')[0];
+
+          const allDates = [
+            p.indoor_start_date, p.direct_sow_date, p.hardening_date,
+            p.transplant_date, p.first_harvest_date,
+            ...(p.events || []).map(e => e.event_date),
+            ...plantingPhotos.map(ph => ph.taken_date),
+          ].filter(Boolean).sort();
+
+          if (allDates.length === 0) {
+            return (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">Timeline</h3>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setShowModal('photo')}>📷</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: today }); setShowModal('event'); }}>+ Log Event</button>
+                  </div>
+                </div>
+                <div className="empty" style={{ padding: 16 }}>
+                  <p style={{ fontSize: 13 }}>No dates or events yet. Add key dates to see the timeline.</p>
+                </div>
+              </div>
+            );
+          }
+
+          const earliest = allDates[0];
+          const latest = allDates[allDates.length - 1];
+
+          const startD = new Date(earliest + 'T00:00:00');
+          const endD = new Date(latest + 'T00:00:00');
+
+          // Pad 1 month each side
+          let sYear = startD.getFullYear(), sMo = startD.getMonth() - 1;
+          if (sMo < 0) { sMo = 11; sYear--; }
+          let eYear = endD.getFullYear(), eMo = endD.getMonth() + 1;
+          if (eMo > 11) { eMo = 0; eYear++; }
+
+          const months = [];
+          let yr = sYear, mo = sMo;
+          while (yr < eYear || (yr === eYear && mo <= eMo)) {
+            months.push({ year: yr, month: mo });
+            mo++;
+            if (mo > 11) { mo = 0; yr++; }
+          }
+          while (months.length < 4) {
+            const last = months[months.length - 1];
+            const nm = last.month === 11 ? 0 : last.month + 1;
+            const ny = last.month === 11 ? last.year + 1 : last.year;
+            months.push({ year: ny, month: nm });
+          }
+
+          const rangeStart = new Date(months[0].year, months[0].month, 1);
+          const rangeEnd = new Date(months[months.length - 1].year, months[months.length - 1].month + 1, 0);
+          const totalDays = Math.floor((rangeEnd - rangeStart) / 86400000) + 1;
+
+          const datePct = (dateStr) => {
+            if (!dateStr) return null;
+            const d = new Date(dateStr + 'T00:00:00');
+            const offset = Math.floor((d - rangeStart) / 86400000);
+            return Math.max(0, Math.min(100, (offset / totalDays) * 100));
+          };
+
+          const bars = [];
+          if (p.indoor_start_date) {
+            const s = datePct(p.indoor_start_date);
+            const e = datePct(p.hardening_date || p.transplant_date || p.indoor_start_date);
+            if (s !== null) bars.push({ left: s, width: Math.max(e - s, 1.5), color: '#8b5cf6', label: '🏠 Started Indoors', projected: false });
+          }
+          if (p.hardening_date) {
+            const s = datePct(p.hardening_date);
+            const e = datePct(p.transplant_date || p.hardening_date);
+            if (s !== null) bars.push({ left: s, width: Math.max(e - s, 1.5), color: '#f59e0b', label: '🌤️ Hardening Off', projected: false });
+          }
+          if (p.transplant_date || p.direct_sow_date) {
+            const startDate = p.transplant_date || p.direct_sow_date;
+            const isProj = new Date(startDate + 'T00:00:00') > new Date();
+            const s = datePct(startDate);
+            const e = datePct(p.first_harvest_date || latest);
+            if (s !== null) bars.push({ left: s, width: Math.max(e - s, 2), color: '#16a34a', label: isProj ? '🌿 Growing (projected)' : '🌿 Growing', projected: isProj });
+          }
+
+          const MO_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+          return (
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Timeline</h3>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 10, marginRight: 8 }}>
+                    {[{ color: '#8b5cf6', label: 'Indoor' }, { color: '#f59e0b', label: 'Hardening' }, { color: '#16a34a', label: 'Outdoor' }].map(({ color, label }) => (
+                      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#8a8580' }}>
+                        <span style={{ width: 10, height: 10, borderRadius: 2, background: color, display: 'inline-block' }} />{label}
+                      </div>
+                    ))}
+                  </div>
                   <button className="btn btn-secondary btn-sm" onClick={() => setShowModal('photo')}>📷</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: new Date().toISOString().split('T')[0] }); setShowModal('event'); }}>+ Log</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: today }); setShowModal('event'); }}>+ Log Event</button>
                 </div>
               </div>
-              {timelineEntries.length === 0 ? (
-                <div className="empty" style={{ padding: '16px' }}>
-                  <p style={{ fontSize: 13 }}>No events yet. Log an event or add a photo to start your timeline.</p>
+
+              {/* Gantt chart */}
+              <div style={{ overflowX: 'auto' }}>
+                <div style={{ minWidth: 500 }}>
+                  {/* Month headers */}
+                  <div style={{ display: 'flex', marginBottom: 4 }}>
+                    {months.map(({ year, month }) => (
+                      <div key={`${year}-${month}`} style={{ flex: 1, fontSize: 11, color: '#8a8580', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                        {MO_NAMES[month]}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Phase bars */}
+                  <div className="cal-track" style={{ background: '#faf8f5', borderRadius: 4, border: '1px solid #f0ece6', marginBottom: 6 }}>
+                    {months.map(({ year, month }) => <div key={`${year}-${month}`} className="cal-month" />)}
+                    {bars.map((bar, i) => (
+                      <div key={i} className="cal-bar" style={{
+                        left: bar.left + '%', width: bar.width + '%',
+                        background: bar.projected ? `${bar.color}30` : bar.color,
+                        border: bar.projected ? `2px dashed ${bar.color}` : 'none',
+                        boxSizing: bar.projected ? 'border-box' : undefined,
+                      }} title={bar.label} />
+                    ))}
+                  </div>
+
+                  {/* Event / milestone / photo marker row */}
+                  <div style={{ position: 'relative', height: 20, marginBottom: 12 }}>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+                      {months.map(({ year, month }) => (
+                        <div key={`${year}-${month}`} style={{ flex: 1, borderRight: '1px solid #e8e4dd' }} />
+                      ))}
+                    </div>
+                    {timelineEntries.map((entry, i) => {
+                      const pct = datePct(entry.date);
+                      if (pct === null) return null;
+                      const isFuture = entry.date > today;
+                      if (entry.type === 'milestone') {
+                        return (
+                          <div key={`m-${i}`} title={`${entry.label}: ${formatDate(entry.date)}`} style={{
+                            position: 'absolute', left: `${pct}%`, top: '50%',
+                            transform: 'translate(-50%, -50%) rotate(45deg)',
+                            width: 9, height: 9, borderRadius: 2, background: entry.color, zIndex: 2,
+                            border: '1.5px solid white', opacity: isFuture ? 0.4 : 1,
+                          }} />
+                        );
+                      }
+                      if (entry.type === 'event') {
+                        const evType = EVENT_TYPES.find(t => t.value === entry.ev.event_type);
+                        const tip = `${evType?.label || entry.ev.event_type}: ${formatDate(entry.ev.event_date)}${entry.ev.details ? ' — ' + entry.ev.details.slice(0, 60) : ''}`;
+                        return (
+                          <div key={`ev-${entry.ev.id}`} title={tip} style={{
+                            position: 'absolute', left: `${pct}%`, top: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: evType?.color || '#6b7280', zIndex: 2, border: '1.5px solid white',
+                            opacity: isFuture ? 0.4 : 1,
+                          }} />
+                        );
+                      }
+                      if (entry.type === 'photo') {
+                        return (
+                          <div key={`ph-${entry.photo.id}`}
+                            title={`📷 Photo: ${formatDate(entry.photo.taken_date)}${entry.photo.caption ? ' — ' + entry.photo.caption : ''}`}
+                            onClick={() => setLightboxIndex(entry.idx)}
+                            style={{
+                              position: 'absolute', left: `${pct}%`, top: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              width: 8, height: 8, borderRadius: '50%',
+                              background: '#94a3b8', zIndex: 2, border: '1.5px solid white', cursor: 'pointer',
+                              opacity: isFuture ? 0.4 : 1,
+                            }} />
+                        );
+                      }
+                      return null;
+                    })}
+                  </div>
                 </div>
-              ) : (
-                timelineEntries.map((entry, i) => {
+              </div>
+
+              {/* Chronological event list */}
+              <div style={{ borderTop: '1px solid #f0ece6', paddingTop: 12 }}>
+                {timelineEntries.map((entry, i) => {
+                  const isFuture = entry.date > today;
+                  const futureStyle = isFuture ? { opacity: 0.45 } : {};
                   if (entry.type === 'milestone') {
                     return (
-                      <div key={`m-${entry.date}-${i}`} className="timeline-item">
-                        <div style={{ width: 12, height: 12, borderRadius: 2, background: entry.color, transform: 'rotate(45deg)', marginTop: 3, flexShrink: 0 }} />
+                      <div key={`m-${entry.date}-${i}`} className="timeline-item" style={futureStyle}>
+                        <div style={{ width: 10, height: 10, borderRadius: 2, background: entry.color, transform: 'rotate(45deg)', marginTop: 3, flexShrink: 0 }} />
                         <div style={{ flex: 1 }}>
                           <div className="timeline-date">{formatDate(entry.date)}</div>
                           <div style={{ fontWeight: 600, fontSize: 13 }}>{entry.label}</div>
@@ -2622,19 +3211,46 @@ export default function App() {
                   if (entry.type === 'event') {
                     const ev = entry.ev;
                     const evType = EVENT_TYPES.find(t => t.value === ev.event_type);
+                    const eventActions = (
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8, opacity: 0, transition: 'opacity 0.15s' }} className="event-actions">
+                        <button title="Edit" onClick={() => { setEditData({ ...ev }); setShowModal('event'); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a8580', padding: '2px 4px', fontSize: 13, borderRadius: 4 }}>✏️</button>
+                        <button title="Delete" onClick={() => { if (window.confirm('Delete this event?')) handleDeleteEvent(ev.id); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '2px 4px', fontSize: 13, borderRadius: 4 }}>🗑</button>
+                      </div>
+                    );
+                    const linkedPhotos = eventPhotoMap[ev.id] || [];
+                    const inlinePhotos = linkedPhotos.length > 0 ? (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                        {linkedPhotos.map(({ photo, idx }) => (
+                          <div key={photo.id} style={{ position: 'relative', display: 'inline-block' }}>
+                            <img
+                              src={`/photos/${photo.filename}`}
+                              style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: '1px solid #e8e4dd', display: 'block' }}
+                              onClick={() => setLightboxIndex(idx)}
+                            />
+                            <button title="Delete photo" onClick={() => { if (window.confirm('Delete this photo?')) handleDeletePhoto(photo.id); }}
+                              style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(220,38,38,0.8)', border: 'none', color: '#fff', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null;
+
                     if (ev.event_type === 'note') {
                       return (
-                        <div key={`ev-${ev.id}`} className="timeline-item">
+                        <div key={`ev-${ev.id}`} className="timeline-item event-row" style={futureStyle}>
                           <div className="timeline-dot" style={{ background: '#c4b8a8' }} />
                           <div style={{ flex: 1 }}>
                             <div className="timeline-date">{formatDate(ev.event_date)}</div>
                             <div style={{ fontSize: 13, color: '#4a4540', fontStyle: 'italic' }}>{ev.details}</div>
+                            {inlinePhotos}
                           </div>
+                          {eventActions}
                         </div>
                       );
                     }
                     return (
-                      <div key={`ev-${ev.id}`} className="timeline-item">
+                      <div key={`ev-${ev.id}`} className="timeline-item event-row" style={futureStyle}>
                         <div className="timeline-dot" style={{ background: evType?.color || '#6b7280' }} />
                         <div style={{ flex: 1 }}>
                           <div className="timeline-date">{formatDate(ev.event_date)}</div>
@@ -2643,32 +3259,40 @@ export default function App() {
                           {ev.details && <div className="timeline-detail">{ev.details}</div>}
                           {ev.product_used && <div style={{ fontSize: 11, color: '#8a8580', marginTop: 2 }}>Product: {ev.product_used}</div>}
                           {ev.severity && <div style={{ fontSize: 11, color: ev.severity === 'high' ? '#dc2626' : ev.severity === 'medium' ? '#f59e0b' : '#16a34a', marginTop: 2 }}>Severity: {ev.severity}</div>}
+                          {inlinePhotos}
                         </div>
+                        {eventActions}
                       </div>
                     );
                   }
                   if (entry.type === 'photo') {
                     return (
-                      <div key={`ph-${entry.photo.id}`} className="timeline-item" style={{ alignItems: 'flex-start' }}>
-                        <div className="timeline-dot" style={{ background: '#8a8580', marginTop: 6 }} />
+                      <div key={`ph-${entry.photo.id}`} className="timeline-item" style={{ alignItems: 'flex-start', ...futureStyle }}>
+                        <div className="timeline-dot" style={{ background: '#94a3b8', marginTop: 6 }} />
                         <div style={{ flex: 1 }}>
                           <div className="timeline-date">{formatDate(entry.photo.taken_date)}</div>
-                          <img
-                            src={`/photos/${entry.photo.filename}`}
-                            style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: '1px solid #e8e4dd', marginTop: 4 }}
-                            onClick={() => setLightboxIndex(entry.idx)}
-                          />
+                          <div style={{ position: 'relative', display: 'inline-block', marginTop: 4 }}>
+                            <img
+                              src={`/photos/${entry.photo.filename}`}
+                              style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: '1px solid #e8e4dd', display: 'block' }}
+                              onClick={() => setLightboxIndex(entry.idx)}
+                            />
+                            <button
+                              title="Delete photo"
+                              onClick={() => { if (window.confirm('Delete this photo?')) handleDeletePhoto(entry.photo.id); }}
+                              style={{ position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: '50%', background: 'rgba(220,38,38,0.8)', border: 'none', color: '#fff', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>✕</button>
+                          </div>
                           {entry.photo.caption && <div style={{ fontSize: 11, color: '#8a8580', marginTop: 4 }}>{entry.photo.caption}</div>}
                         </div>
                       </div>
                     );
                   }
                   return null;
-                })
-              )}
+                })}
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
       </div>
     );
   };
@@ -2683,11 +3307,13 @@ export default function App() {
       <div className="app">
         <nav className="nav">
           <div className="nav-logo">🌱 Heirloom</div>
-          {['dashboard','seeds','plantings','calendar','map'].map(v => (
-            <div key={v} className={`nav-link ${view === v || (view === 'detail' && v === 'plantings') || (view === 'bed-planner' && v === 'map') ? 'active' : ''}`} onClick={() => setView(v)}>
-              {v === 'map' ? 'Garden Map' : v.charAt(0).toUpperCase() + v.slice(1)}
-            </div>
-          ))}
+          <div className="nav-links">
+            {['dashboard','seeds','plantings','calendar','map','photos'].map(v => (
+              <div key={v} className={`nav-link ${view === v || (view === 'detail' && v === 'plantings') || (view === 'bed-planner' && v === 'map') ? 'active' : ''}`} onClick={() => setView(v)}>
+                {v === 'map' ? 'Garden Map' : v.charAt(0).toUpperCase() + v.slice(1)}
+              </div>
+            ))}
+          </div>
           <div className="nav-right">
             <button className="nav-btn" onClick={async () => {
               const res = await api.post('/api/seeds/fetch-images', {});
@@ -2699,12 +3325,32 @@ export default function App() {
           </div>
         </nav>
 
+        {/* Mobile bottom tab bar */}
+        <div className="mobile-tabs">
+          {[
+            { key: 'dashboard', icon: '🏠', label: 'Home' },
+            { key: 'seeds',     icon: '🌱', label: 'Seeds' },
+            { key: 'plantings', icon: '🌿', label: 'Plants' },
+            { key: 'calendar',  icon: '📅', label: 'Calendar' },
+            { key: 'map',       icon: '🗺️',  label: 'Map' },
+            { key: 'photos',    icon: '📷', label: 'Photos' },
+          ].map(({ key, icon, label }) => (
+            <button key={key}
+              className={`mobile-tab ${view === key || (view === 'detail' && key === 'plantings') || (view === 'bed-planner' && key === 'map') ? 'active' : ''}`}
+              onClick={() => setView(key)}>
+              <span className="mobile-tab-icon">{icon}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="content" onMouseUp={() => { if (isDragging) { setIsDragging(false); loadData(); } }}>
           {view === 'dashboard' && renderDashboard()}
           {view === 'seeds' && renderSeeds()}
           {view === 'plantings' && renderPlantings()}
           {view === 'calendar' && renderCalendarView()}
           {view === 'map' && renderGardenMapView()}
+          {view === 'photos' && renderPhotos()}
           {view === 'bed-planner' && renderBedPlanner()}
           {view === 'detail' && renderDetail()}
         </div>
@@ -2714,6 +3360,76 @@ export default function App() {
         {showModal === 'edit-planting' && renderPlantingModal(true)}
         {showModal === 'event' && renderEventModal()}
         {showModal === 'photo' && renderPhotoModal()}
+
+        {/* Quick Note modal (optimised for mobile) */}
+        {showModal === 'quick-note' && (
+          <div className="modal-overlay" onClick={() => { setShowModal(null); setEditData({}); }}>
+            <div className="modal quick-action-modal" onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>
+                📝 Note — {selectedPlanting?.seed_name}
+              </div>
+              <textarea
+                autoFocus
+                placeholder="What's on your mind…"
+                value={editData.details || ''}
+                onChange={e => setEditData(d => ({ ...d, details: e.target.value }))}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+                <button className="btn btn-secondary" onClick={() => { setShowModal(null); setEditData({}); }}>Cancel</button>
+                <button className="btn btn-primary"
+                  disabled={!editData.details?.trim()}
+                  onClick={async () => {
+                    if (!selectedPlanting || !editData.details?.trim()) return;
+                    await api.post(`/api/plantings/${selectedPlanting.id}/events`, {
+                      event_type: 'note',
+                      event_date: new Date().toISOString().split('T')[0],
+                      details: editData.details.trim(),
+                    });
+                    setShowModal(null); setEditData({});
+                    loadData();
+                    const updated = await api.get('/api/plantings?year=2026');
+                    const refreshed = updated.find(p => p.id === selectedPlanting.id);
+                    if (refreshed) setSelectedPlanting(refreshed);
+                  }}>
+                  Save Note
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Photo modal (opens camera on iPhone) */}
+        {showModal === 'quick-photo' && (
+          <div className="modal-overlay" onClick={() => setShowModal(null)}>
+            <div className="modal quick-action-modal" onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>
+                📷 Photo — {selectedPlanting?.seed_name}
+              </div>
+              <p style={{ fontSize: 13, color: '#8a8580', marginBottom: 16 }}>
+                Select an image or tap to open your camera.
+              </p>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ fontSize: 14, marginBottom: 16, width: '100%', display: 'block' }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !selectedPlanting) return;
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  formData.append('taken_date', new Date().toISOString().split('T')[0]);
+                  formData.append('caption', '');
+                  await api.upload(`/api/plantings/${selectedPlanting.id}/photos`, formData);
+                  setShowModal(null);
+                  loadData();
+                  if (view === 'detail') loadPhotos(selectedPlanting.id);
+                }}
+              />
+              <button className="btn btn-secondary" style={{ width: '100%' }}
+                onClick={() => setShowModal(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
 
         {showModal === 'plant-harvest' && (
           <div className="modal-overlay" onClick={() => setShowModal(null)}>
@@ -2768,17 +3484,53 @@ export default function App() {
 
         {renderPlantPanel()}
 
+        {photosLightboxIndex !== null && allPhotos[photosLightboxIndex] && (() => {
+          const photo = allPhotos[photosLightboxIndex];
+          const total = allPhotos.length;
+          return (
+            <div className="lightbox" onClick={() => setPhotosLightboxIndex(null)}>
+              <button onClick={e => { e.stopPropagation(); setPhotosLightboxIndex(null); }}
+                style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 20, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+              {photo.seed_name && (
+                <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.75)', fontSize: 13, pointerEvents: 'none', whiteSpace: 'nowrap' }}>{photo.seed_name}</div>
+              )}
+              {photosLightboxIndex > 0 && (
+                <button onClick={e => { e.stopPropagation(); setPhotosLightboxIndex(i => i - 1); }}
+                  style={{ position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+              )}
+              <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} onClick={e => e.stopPropagation()} />
+              {photosLightboxIndex < total - 1 && (
+                <button onClick={e => { e.stopPropagation(); setPhotosLightboxIndex(i => i + 1); }}
+                  style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+              )}
+              <div style={{ position: 'absolute', bottom: 24, textAlign: 'center', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+                {photo.caption && <div className="lightbox-caption">{photo.caption}</div>}
+                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>{photosLightboxIndex + 1} / {total} · {formatDate(photo.taken_date)}</div>
+              </div>
+            </div>
+          );
+        })()}
+
         {lightboxIndex !== null && plantingPhotos[lightboxIndex] && (() => {
           const photo = plantingPhotos[lightboxIndex];
           const total = plantingPhotos.length;
           // Keyboard nav effect — inline via useEffect equivalent via event listener
           return (
             <div className="lightbox" onClick={() => setLightboxIndex(null)}>
+              {/* Close */}
+              <button onClick={e => { e.stopPropagation(); setLightboxIndex(null); }}
+                style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 20, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+              {/* Delete */}
+              <button onClick={e => { e.stopPropagation(); if (window.confirm('Delete this photo?')) handleDeletePhoto(photo.id); }}
+                style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(220,38,38,0.7)', border: 'none', color: '#fff', fontSize: 16, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Delete photo">🗑</button>
+              {/* Prev */}
               {lightboxIndex > 0 && (
                 <button onClick={e => { e.stopPropagation(); setLightboxIndex(i => i - 1); }}
                   style={{ position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
               )}
               <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} onClick={e => e.stopPropagation()} />
+              {/* Next */}
               {lightboxIndex < total - 1 && (
                 <button onClick={e => { e.stopPropagation(); setLightboxIndex(i => i + 1); }}
                   style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
