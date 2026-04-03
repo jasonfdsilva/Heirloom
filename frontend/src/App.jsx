@@ -401,6 +401,7 @@ export default function App() {
 
   const handleCreateEvent = async () => {
     if (!selectedPlanting) return;
+    if (!editData.event_type) { setModalError('Please select an event type.'); return; }
     const payload = {};
     ['event_date', 'event_type', 'details', 'severity', 'product_used', 'quantity'].forEach(k => {
       if (editData[k] !== undefined) payload[k] = editData[k];
@@ -1120,13 +1121,15 @@ export default function App() {
   );
 
   const renderEventModal = () => (
-    <div className="modal-overlay" onClick={() => setShowModal(null)}>
+    <div className="modal-overlay" onClick={() => { setShowModal(null); setModalError(null); }}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3 className="modal-title">Log Event</h3>
 
+        {modalError && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '8px 12px', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{modalError}</div>}
+
         <div className="form-group">
-          <label className="form-label">Event Type</label>
-          <select className="form-input" value={editData.event_type || ''} onChange={e => setEditData(d => ({ ...d, event_type: e.target.value }))}>
+          <label className="form-label">Event Type <span style={{ color: '#dc2626' }}>*</span></label>
+          <select className="form-input" value={editData.event_type || ''} onChange={e => { setModalError(null); setEditData(d => ({ ...d, event_type: e.target.value })); }}>
             <option value="">Select type...</option>
             {EVENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>

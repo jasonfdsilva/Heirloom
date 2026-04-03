@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 class EventCreate(BaseModel):
     event_date: str
-    event_type: str
+    event_type: str = 'note'
     details: Optional[str] = None
     severity: Optional[str] = None
     product_used: Optional[str] = None
