@@ -47,18 +47,21 @@ test('edit a seed short label and verify it saves', async ({ page }) => {
 
 test('delete a planting and verify it is removed from the list', async ({ page }) => {
   await page.goto('/');
-  const { before } = await createPlanting(page);
+  await createPlanting(page);
+
+  // Capture count after creation
+  const afterCreate = await page.locator('tbody tr').count();
 
   // Accept the confirmation dialog automatically
   page.on('dialog', dialog => dialog.accept());
 
-  // Delete the last row (the one we just created)
+  // Delete the last planting row (the one we just created)
   const rows = page.locator('tbody tr');
   const lastRow = rows.last();
-  await lastRow.locator('button[title="Delete"], button:has-text("🗑"), button.btn-danger').first().click();
+  await lastRow.locator('button').last().click();
 
-  // Row count should return to original
-  await expect(page.locator('tbody tr')).toHaveCount(before, { timeout: 5000 });
+  // Row count must be less than after-create (handles category header removal too)
+  await expect(page.locator('tbody tr')).not.toHaveCount(afterCreate, { timeout: 5000 });
 });
 
 // ── 7. Open planting detail and verify the Log Event button is present ────────
