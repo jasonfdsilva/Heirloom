@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { catColor, statusColor } from '../../lib/colors';
+import { catColor, statusColor, plantStatusColor } from '../../lib/colors';
 
 describe('catColor', () => {
   it('returns correct color for known category', () => {
@@ -28,5 +28,19 @@ describe('statusColor', () => {
   it('returns fallback for unknown status', () => {
     expect(statusColor('invalid')).toBe('#9ca3af');
     expect(statusColor('')).toBe('#9ca3af');
+  });
+});
+
+describe('plantStatusColor', () => {
+  it('returns correct color for known plant status', () => {
+    expect(plantStatusColor('healthy')).toBe('#16a34a');
+    expect(plantStatusColor('struggling')).toBe('#f59e0b');
+    expect(plantStatusColor('dead')).toBe('#6b7280');
+    expect(plantStatusColor('harvested-out')).toBe('#7c3aed');
+  });
+
+  it('returns fallback for unknown plant status', () => {
+    expect(plantStatusColor('unknown')).toBe('#9ca3af');
+    expect(plantStatusColor('')).toBe('#9ca3af');
   });
 });
