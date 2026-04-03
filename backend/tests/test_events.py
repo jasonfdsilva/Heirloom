@@ -107,3 +107,60 @@ def test_multiple_events_ordered(client):
     r = client.get("/api/plantings?year=2026")
     planting = next(p for p in r.json() if p["id"] == pid)
     assert len(planting["events"]) == 3
+
+
+# ── Bulk event tests ──────────────────────────────────────────────────────────
+
+def test_bulk_event_creates_for_all_plantings(client):
+    pid1 = _create_planting(client, seed_id="test-lettuce")
+    pid2 = _create_planting(client, seed_id="test-lettuce")
+    pid3 = _create_planting(client, seed_id="test-lettuce")
+
+    r = client.post("/api/events/bulk", json={
+        "planting_ids": [pid1, pid2, pid3],
+        "event_date": "2026-04-01",
+        "event_type": "fertilize",
+        "details": "Fish emulsion",
+        "product_used": "Neptune's Harvest",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["created"] == 3
+
+    # Verify all three plantings have the event
+    list_r = client.get("/api/plantings?year=2026")
+    plantings = {p["id"]: p for p in list_r.json()}
+    for pid in [pid1, pid2, pid3]:
+        events = plantings[pid]["events"]
+        assert len(events) == 1
+        assert events[0]["event_type"] == "fertilize"
+        assert events[0]["product_used"] == "Neptune's Harvest"
+
+
+def test_bulk_event_rejects_germination(client):
+    pid = _create_planting(client)
+    r = client.post("/api/events/bulk", json={
+        "planting_ids": [pid],
+        "event_date": "2026-04-01",
+        "event_type": "germination",
+    })
+    assert r.status_code == 422
+
+
+def test_bulk_event_rejects_missing_planting_id(client):
+    r = client.post("/api/events/bulk", json={
+        "planting_ids": [99999],
+        "event_date": "2026-04-01",
+        "event_type": "note",
+        "details": "Should fail",
+    })
+    assert r.status_code == 404
+
+
+def test_bulk_event_rejects_empty_planting_ids(client):
+    r = client.post("/api/events/bulk", json={
+        "planting_ids": [],
+        "event_date": "2026-04-01",
+        "event_type": "note",
+    })
+    assert r.status_code == 422

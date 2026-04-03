@@ -14,6 +14,7 @@ export default function Plantings({
   handleDuplicatePlanting, handleDeletePlanting,
   setSelectedPlanting, setEditData, setShowModal,
   loadData,
+  bulkSelectMode, setBulkSelectMode, selectedPlantingIds, setSelectedPlantingIds, onBulkLogEvent,
 }) {
   const varietySummary = Object.values(
     plantings.reduce((acc, p) => {
@@ -25,6 +26,27 @@ export default function Plantings({
     }, {})
   ).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 
+  const togglePlanting = (id) => {
+    setSelectedPlantingIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllInCategory = (catPlantings, shouldSelect) => {
+    setSelectedPlantingIds(prev => {
+      const next = new Set(prev);
+      catPlantings.forEach(p => shouldSelect ? next.add(p.id) : next.delete(p.id));
+      return next;
+    });
+  };
+
+  const exitBulkMode = () => {
+    setBulkSelectMode(false);
+    setSelectedPlantingIds(new Set());
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -35,6 +57,12 @@ export default function Plantings({
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-secondary" onClick={() => setShowPlantingSummary(s => !s)}>
             {showPlantingSummary ? 'Hide Summary' : 'Show Summary'}
+          </button>
+          <button
+            className={bulkSelectMode ? 'btn btn-primary' : 'btn btn-secondary'}
+            onClick={() => bulkSelectMode ? exitBulkMode() : setBulkSelectMode(true)}
+          >
+            {bulkSelectMode ? 'Cancel Select' : 'Select'}
           </button>
           <button className="btn btn-primary" onClick={() => { setEditData({}); setShowModal('planting'); }}>+ New Planting</button>
         </div>
@@ -112,7 +140,8 @@ export default function Plantings({
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{ paddingLeft: 16 }}>Variety / Plants</th>
+                  {bulkSelectMode && <th style={{ width: 40, paddingLeft: 16 }}></th>}
+                  <th style={{ paddingLeft: bulkSelectMode ? 8 : 16 }}>Variety / Plants</th>
                   <th>Location</th>
                   <th>Started</th>
                   <th>Planted</th>
@@ -139,18 +168,30 @@ export default function Plantings({
                     const catStarted = catPlantings.reduce((s, p) => s + (p.qty_started || 0), 0);
                     const catPlanted = catPlantings.reduce((s, p) => s + (p.qty_planted || 0), 0);
                     const color = catColor(cat);
+                    const allCatSelected = catPlantings.every(p => selectedPlantingIds.has(p.id));
 
                     const categoryRow = (
                       <tr key={`cat-${cat}`}
-                        style={{ background: color + '14', cursor: 'pointer', userSelect: 'none' }}
-                        onClick={() => setCollapsedCategories(prev => {
+                        style={{ background: color + '14', cursor: bulkSelectMode ? 'default' : 'pointer', userSelect: 'none' }}
+                        onClick={bulkSelectMode ? undefined : () => setCollapsedCategories(prev => {
                           const next = new Set(prev);
                           if (next.has(cat)) next.delete(cat); else next.add(cat);
                           return next;
                         })}>
-                        <td colSpan={8} style={{ padding: '8px 12px' }}>
+                        {bulkSelectMode && (
+                          <td style={{ paddingLeft: 16, width: 40 }} onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={allCatSelected}
+                              onChange={e => selectAllInCategory(catPlantings, e.target.checked)}
+                              style={{ cursor: 'pointer', width: 16, height: 16 }}
+                              title={allCatSelected ? 'Deselect all' : 'Select all'}
+                            />
+                          </td>
+                        )}
+                        <td colSpan={bulkSelectMode ? 8 : 8} style={{ padding: '8px 12px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 10, color, width: 12, textAlign: 'center' }}>{isCatCollapsed ? '▶' : '▼'}</span>
+                            {!bulkSelectMode && <span style={{ fontSize: 10, color, width: 12, textAlign: 'center' }}>{isCatCollapsed ? '▶' : '▼'}</span>}
                             <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
                             <span style={{ fontWeight: 700, fontSize: 12, color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cat}</span>
                             <span style={{ fontSize: 12, color: '#8a8580', fontWeight: 400 }}>
@@ -161,7 +202,7 @@ export default function Plantings({
                       </tr>
                     );
 
-                    if (isCatCollapsed) return [categoryRow];
+                    if (!bulkSelectMode && isCatCollapsed) return [categoryRow];
 
                     const plantingRows = catPlantings.map(p => {
                       const seed = seeds.find(sd => sd.id === p.seed_id);
@@ -171,26 +212,45 @@ export default function Plantings({
                         .map(sid => structures.find(s => s.id === sid)?.name || sid)
                         .filter(Boolean);
                       const isProjected = p.transplant_date && new Date(p.transplant_date + 'T00:00:00') > new Date();
+                      const isSelected = selectedPlantingIds.has(p.id);
 
                       return (
                         <React.Fragment key={p.id}>
-                          <tr style={{ cursor: 'pointer', background: isExpanded ? '#faf8f5' : undefined }}
-                            onClick={() => openPlantingDetail(p)}>
+                          <tr
+                            style={{
+                              cursor: 'pointer',
+                              background: isSelected ? '#f0ece6' : isExpanded ? '#faf8f5' : undefined,
+                              outline: isSelected ? '2px solid #8a6a4a' : undefined,
+                              outlineOffset: -2,
+                            }}
+                            onClick={() => bulkSelectMode ? togglePlanting(p.id) : openPlantingDetail(p)}>
+                            {bulkSelectMode && (
+                              <td style={{ paddingLeft: 16, width: 40 }} onClick={e => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => togglePlanting(p.id)}
+                                  style={{ cursor: 'pointer', width: 16, height: 16 }}
+                                />
+                              </td>
+                            )}
                             <td style={{ paddingLeft: 8 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <button
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 11, color: '#8a8580', flexShrink: 0, lineHeight: 1 }}
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    setExpandedPlantingIds(prev => {
-                                      const next = new Set(prev);
-                                      if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
-                                      return next;
-                                    });
-                                  }}
-                                  title={isExpanded ? 'Collapse' : `Expand (${members.length} plants)`}>
-                                  {isExpanded ? '▼' : '▶'}
-                                </button>
+                                {!bulkSelectMode && (
+                                  <button
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 11, color: '#8a8580', flexShrink: 0, lineHeight: 1 }}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setExpandedPlantingIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
+                                        return next;
+                                      });
+                                    }}
+                                    title={isExpanded ? 'Collapse' : `Expand (${members.length} plants)`}>
+                                    {isExpanded ? '▼' : '▶'}
+                                  </button>
+                                )}
                                 {seed?.image_url ? (
                                   <img src={seed.image_url} alt={p.seed_name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
                                 ) : (
@@ -256,7 +316,7 @@ export default function Plantings({
                             </td>
                           </tr>
 
-                          {isExpanded && members.map(m => {
+                          {!bulkSelectMode && isExpanded && members.map(m => {
                             const stName = structures.find(s => s.id === m.structure_id)?.name;
                             const sColor = plantStatusColor(m.plant_status);
                             return (
@@ -305,50 +365,161 @@ export default function Plantings({
         {plantings.length === 0 && (
           <EmptyState icon="🌱" message="No plantings yet." />
         )}
-        {[...plantings].sort((a, b) => a.category.localeCompare(b.category) || a.seed_name.localeCompare(b.seed_name)).map(p => {
-          const todayStr = new Date().toISOString().split('T')[0];
-          const nextDate = p.transplant_date || p.direct_sow_date || p.indoor_start_date;
-          const nextIcon = p.transplant_date ? '🏡' : p.direct_sow_date ? '🌿' : '🏠';
-          return (
-            <div key={p.id} className="card" style={{ marginBottom: 10, padding: '14px 16px', cursor: 'pointer' }}
-              onClick={() => openPlantingDetail(p)}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {p.seed_name}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#8a8580', marginBottom: nextDate ? 6 : 0 }}>
-                    {p.category}{p.structure_name ? ` · ${p.structure_name}` : ''}
-                  </div>
-                  {nextDate && (
-                    <div style={{ fontSize: 12, color: nextDate < todayStr ? '#dc2626' : '#8a8580' }}>
-                      {nextIcon} {formatDate(nextDate)}
+        {(() => {
+          const sorted = [...plantings].sort((a, b) => a.category.localeCompare(b.category) || a.seed_name.localeCompare(b.seed_name));
+          const byCategory = {};
+          sorted.forEach(p => {
+            const cat = p.category || 'Other';
+            if (!byCategory[cat]) byCategory[cat] = [];
+            byCategory[cat].push(p);
+          });
+
+          return Object.entries(byCategory).map(([cat, catPlantings]) => {
+            const color = catColor(cat);
+            const allCatSelected = catPlantings.every(p => selectedPlantingIds.has(p.id));
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            return (
+              <React.Fragment key={cat}>
+                {bulkSelectMode ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                      <span style={{ fontWeight: 700, fontSize: 11, color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cat}</span>
                     </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 12, flexShrink: 0 }}
-                  onClick={e => e.stopPropagation()}>
-                  <button className="btn btn-secondary btn-sm"
-                    style={{ fontSize: 15, padding: '5px 10px' }}
-                    onClick={() => { setSelectedPlanting(p); setEditData({}); setShowModal('quick-note'); }}>
-                    📝
-                  </button>
-                  <button className="btn btn-secondary btn-sm"
-                    style={{ fontSize: 15, padding: '5px 10px' }}
-                    onClick={() => { setSelectedPlanting(p); setShowModal('quick-photo'); }}>
-                    📷
-                  </button>
-                  <button className="btn btn-secondary btn-sm"
-                    style={{ fontSize: 15, padding: '5px 10px' }}
-                    onClick={() => { setSelectedPlanting(p); setEditData({ event_date: new Date().toISOString().split('T')[0], event_type: 'note' }); setShowModal('event'); }}>
-                    📋
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+                    <button
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#5a4a3a', padding: '2px 6px', fontWeight: 500 }}
+                      onClick={() => selectAllInCategory(catPlantings, !allCatSelected)}
+                    >
+                      {allCatSelected ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+                ) : null}
+
+                {catPlantings.map(p => {
+                  const nextDate = p.transplant_date || p.direct_sow_date || p.indoor_start_date;
+                  const nextIcon = p.transplant_date ? '🏡' : p.direct_sow_date ? '🌿' : '🏠';
+                  const isSelected = selectedPlantingIds.has(p.id);
+
+                  return (
+                    <div key={p.id} className="card"
+                      style={{
+                        marginBottom: 10, padding: '14px 16px', cursor: 'pointer',
+                        background: isSelected ? '#f0ece6' : undefined,
+                        border: isSelected ? '2px solid #8a6a4a' : undefined,
+                      }}
+                      onClick={() => bulkSelectMode ? togglePlanting(p.id) : openPlantingDetail(p)}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {p.seed_name}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#8a8580', marginBottom: nextDate ? 6 : 0 }}>
+                            {p.category}{p.structure_name ? ` · ${p.structure_name}` : ''}
+                          </div>
+                          {nextDate && (
+                            <div style={{ fontSize: 12, color: nextDate < todayStr ? '#dc2626' : '#8a8580' }}>
+                              {nextIcon} {formatDate(nextDate)}
+                            </div>
+                          )}
+                        </div>
+                        {bulkSelectMode ? (
+                          <div style={{ marginLeft: 12, flexShrink: 0, display: 'flex', alignItems: 'center' }}
+                            onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => togglePlanting(p.id)}
+                              style={{ width: 22, height: 22, cursor: 'pointer' }}
+                            />
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 12, flexShrink: 0 }}
+                            onClick={e => e.stopPropagation()}>
+                            <button className="btn btn-secondary btn-sm"
+                              style={{ fontSize: 15, padding: '5px 10px' }}
+                              onClick={() => { setSelectedPlanting(p); setEditData({}); setShowModal('quick-note'); }}>
+                              📝
+                            </button>
+                            <button className="btn btn-secondary btn-sm"
+                              style={{ fontSize: 15, padding: '5px 10px' }}
+                              onClick={() => { setSelectedPlanting(p); setShowModal('quick-photo'); }}>
+                              📷
+                            </button>
+                            <button className="btn btn-secondary btn-sm"
+                              style={{ fontSize: 15, padding: '5px 10px' }}
+                              onClick={() => { setSelectedPlanting(p); setEditData({ event_date: new Date().toISOString().split('T')[0], event_type: 'note' }); setShowModal('event'); }}>
+                              📋
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            );
+          });
+        })()}
       </div>
+
+      {/* Floating bulk action bar */}
+      {bulkSelectMode && (
+        <div style={{
+          position: 'fixed',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          bottom: 'calc(60px + env(safe-area-inset-bottom))',
+          zIndex: 200,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          background: '#2d2a24',
+          color: '#fff',
+          borderRadius: 32,
+          padding: '12px 20px',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.28)',
+          fontSize: 14,
+          fontWeight: 500,
+          whiteSpace: 'nowrap',
+        }}
+          className="bulk-action-bar"
+        >
+          <span style={{ color: selectedPlantingIds.size === 0 ? '#8a8580' : '#e8c89a' }}>
+            {selectedPlantingIds.size === 0 ? 'Select plantings above' : `${selectedPlantingIds.size} planting${selectedPlantingIds.size !== 1 ? 's' : ''} selected`}
+          </span>
+          <button
+            onClick={onBulkLogEvent}
+            disabled={selectedPlantingIds.size === 0}
+            style={{
+              background: selectedPlantingIds.size === 0 ? '#4a4540' : '#8a6a4a',
+              color: selectedPlantingIds.size === 0 ? '#8a8580' : '#fff',
+              border: 'none', borderRadius: 20, padding: '8px 16px',
+              cursor: selectedPlantingIds.size === 0 ? 'not-allowed' : 'pointer',
+              fontSize: 13, fontWeight: 600,
+            }}
+          >
+            Log Event
+          </button>
+          <button
+            onClick={exitBulkMode}
+            style={{
+              background: 'none', border: '1px solid #5a5550', color: '#c4b8a8',
+              borderRadius: 20, padding: '8px 14px', cursor: 'pointer', fontSize: 13,
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      <style>{`
+        @media (min-width: 769px) {
+          .bulk-action-bar {
+            bottom: 16px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import sqlite3
 
-from backend.app.schemas.event import EventCreate
+from backend.app.schemas.event import BulkEventCreate, EventCreate
 
 
 def create_event(db: sqlite3.Connection, planting_id: int, data: EventCreate) -> dict:
@@ -31,3 +31,16 @@ def delete_event(db: sqlite3.Connection, event_id: int) -> dict:
     db.execute("DELETE FROM planting_events WHERE id = ?", (event_id,))
     db.commit()
     return {"message": "Event deleted"}
+
+
+def create_bulk_events(db: sqlite3.Connection, planting_ids: list, data: BulkEventCreate) -> dict:
+    for pid in planting_ids:
+        db.execute(
+            """INSERT INTO planting_events
+               (planting_id, event_date, event_type, details, severity, product_used)
+               VALUES (?,?,?,?,?,?)""",
+            (pid, data.event_date, data.event_type, data.details,
+             data.severity, data.product_used)
+        )
+    db.commit()
+    return {"created": len(planting_ids), "message": f"Event logged for {len(planting_ids)} plantings"}

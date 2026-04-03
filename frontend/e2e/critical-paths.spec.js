@@ -133,7 +133,62 @@ test('photos view loads correctly', async ({ page }) => {
   expect(hasEmpty || hasPhotos).toBeTruthy();
 });
 
-// ── 9. Export produces a JSON download ───────────────────────────────────────
+// ── 9. Bulk log event applies to multiple plantings ──────────────────────────
+
+test('bulk log event applies to multiple plantings', async ({ page }) => {
+  await page.goto('/');
+
+  // Create 2 new plantings to use as our bulk targets
+  const { id: id1, seedName: seedName1 } = await createPlanting(page);
+  const { id: id2 } = await createPlanting(page);
+
+  await page.locator('.nav-link', { hasText: 'Plantings' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Plantings');
+
+  // Enter bulk select mode
+  await page.locator('button', { hasText: 'Select' }).first().click();
+
+  // Checkboxes should now be visible in table rows
+  const baseName = seedName1.split('(')[0].trim();
+  const targetRows = page.locator('tbody tr').filter({ hasText: baseName });
+
+  // Click the checkbox inside the first matching row
+  await targetRows.nth(0).locator('input[type="checkbox"]').click();
+  // Click the checkbox inside the second matching row (same seed variety, different planting)
+  await targetRows.nth(1).locator('input[type="checkbox"]').click();
+
+  // Floating bar should show 2 selected
+  await expect(page.locator('.bulk-action-bar')).toContainText('2 plantings selected');
+
+  // Open bulk event modal
+  await page.locator('.bulk-action-bar button', { hasText: 'Log Event' }).click();
+  await expect(page.locator('.modal-title')).toContainText('Log Event — 2 plantings');
+
+  // Select "Note" event type and enter details
+  await page.locator('.modal select.form-input').selectOption('note');
+  await page.locator('.modal textarea.form-input').fill('E2E bulk test event');
+
+  // Submit
+  await page.locator('.modal-actions button.btn-primary').click();
+  await expect(page.locator('.modal-title')).not.toBeVisible({ timeout: 5000 });
+
+  // Bulk mode should be exited (floating bar gone)
+  await expect(page.locator('.bulk-action-bar')).not.toBeVisible();
+
+  // Verify via API that both plantings have the new event
+  if (id1 && id2) {
+    const resp = await page.request.get('/api/plantings?year=2026');
+    const allPlantings = await resp.json();
+    const p1 = allPlantings.find(p => p.id === id1);
+    const p2 = allPlantings.find(p => p.id === id2);
+
+    expect(p1?.events?.some(e => e.details === 'E2E bulk test event')).toBe(true);
+    expect(p2?.events?.some(e => e.details === 'E2E bulk test event')).toBe(true);
+  }
+  // Cleanup: plantings (and their events) will be deleted in afterAll
+});
+
+// ── 10. Export produces a JSON download ──────────────────────────────────────
 
 test('export button triggers a JSON download with expected keys', async ({ page }) => {
   await page.goto('/');

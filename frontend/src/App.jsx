@@ -12,6 +12,7 @@ import Lightbox from './components/common/Lightbox';
 import Photos from './components/views/Photos';
 import CalendarView from './components/views/CalendarView';
 import EventModal from './components/modals/EventModal';
+import BulkEventModal from './components/modals/BulkEventModal';
 import PhotoModal from './components/modals/PhotoModal';
 import PlantingModal from './components/modals/PlantingModal';
 import QuickNoteModal from './components/modals/QuickNoteModal';
@@ -256,9 +257,11 @@ const styles = `
 export default function App() {
   const [view, setView] = useState('dashboard');
   const [selectedPlanting, setSelectedPlanting] = useState(null);
-  const [showModal, setShowModal] = useState(null); // 'planting', 'event', 'photo'
+  const [showModal, setShowModal] = useState(null); // 'planting', 'event', 'photo', 'bulk-event'
   const [editData, setEditData] = useState({});
   const [modalError, setModalError] = useState(null);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [selectedPlantingIds, setSelectedPlantingIds] = useState(new Set());
   const [showPlantingSummary, setShowPlantingSummary] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [plantingPhotos, setPlantingPhotos] = useState([]);
@@ -446,6 +449,26 @@ export default function App() {
     const updated = await api.get('/api/plantings?year=2026');
     const refreshed = updated.find(p => p.id === selectedPlanting.id);
     if (refreshed) setSelectedPlanting(refreshed);
+  };
+
+  const handleCreateBulkEvent = async () => {
+    if (selectedPlantingIds.size === 0) return;
+    if (!editData.event_type) { setModalError('Please select an event type.'); return; }
+    const today = new Date().toISOString().split('T')[0];
+    const payload = {
+      planting_ids: Array.from(selectedPlantingIds),
+      event_date: editData.event_date || today,
+      event_type: editData.event_type,
+    };
+    if (editData.details) payload.details = editData.details;
+    if (editData.severity) payload.severity = editData.severity;
+    if (editData.product_used) payload.product_used = editData.product_used;
+    await api.post('/api/events/bulk', payload);
+    setShowModal(null);
+    setEditData({});
+    setBulkSelectMode(false);
+    setSelectedPlantingIds(new Set());
+    loadData();
   };
 
   const handleDeleteEvent = async (eventId) => {
@@ -669,6 +692,14 @@ export default function App() {
               setEditData={setEditData}
               setShowModal={setShowModal}
               loadData={loadData}
+              bulkSelectMode={bulkSelectMode}
+              setBulkSelectMode={setBulkSelectMode}
+              selectedPlantingIds={selectedPlantingIds}
+              setSelectedPlantingIds={setSelectedPlantingIds}
+              onBulkLogEvent={() => {
+                setEditData({ event_date: new Date().toISOString().split('T')[0] });
+                setShowModal('bulk-event');
+              }}
             />
           )}
           {view === 'calendar' && <CalendarView plantings={plantings} onPlantingClick={openPlantingDetail} />}
@@ -761,6 +792,18 @@ export default function App() {
             onSubmit={handleCreateEvent}
             onClose={() => setShowModal(null)}
             selectedPlanting={selectedPlanting}
+          />
+        )}
+
+        {showModal === 'bulk-event' && (
+          <BulkEventModal
+            editData={editData}
+            setEditData={setEditData}
+            modalError={modalError}
+            setModalError={setModalError}
+            onSubmit={handleCreateBulkEvent}
+            onClose={() => { setShowModal(null); setEditData({}); setModalError(null); }}
+            selectedPlantings={plantings.filter(p => selectedPlantingIds.has(p.id))}
           />
         )}
 
