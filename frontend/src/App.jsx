@@ -1913,7 +1913,7 @@ export default function App() {
                   </button>
                   <button className="btn btn-secondary btn-sm"
                     style={{ fontSize: 15, padding: '5px 10px' }}
-                    onClick={() => { setSelectedPlanting(p); setEditData({ event_date: new Date().toISOString().split('T')[0] }); setShowModal('event'); }}>
+                    onClick={() => { setSelectedPlanting(p); setEditData({ event_date: new Date().toISOString().split('T')[0], event_type: 'note' }); setShowModal('event'); }}>
                     📋
                   </button>
                 </div>
@@ -2509,7 +2509,7 @@ export default function App() {
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary" onClick={() => { setEditData(p); setShowModal('edit-planting'); }}>Edit</button>
             <button className="btn btn-secondary" onClick={() => { handleDuplicatePlanting(p.id); }}>Duplicate</button>
-            <button className="btn btn-primary" onClick={() => { setEditData({ event_date: new Date().toISOString().split('T')[0] }); setShowModal('event'); }}>+ Log Event</button>
+            <button className="btn btn-primary" onClick={() => { setEditData({ event_date: new Date().toISOString().split('T')[0], event_type: 'note' }); setShowModal('event'); }}>+ Log Event</button>
             <button className="btn btn-primary" onClick={() => setShowModal('photo')}>📷 Add Photo</button>
           </div>
         </div>
@@ -2634,7 +2634,7 @@ export default function App() {
                   <h3 className="card-title">Timeline</h3>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button className="btn btn-secondary btn-sm" onClick={() => setShowModal('photo')}>📷</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: today }); setShowModal('event'); }}>+ Log Event</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: today, event_type: 'note' }); setShowModal('event'); }}>+ Log Event</button>
                   </div>
                 </div>
                 <EmptyState style={{ padding: 16 }} message="No dates or events yet. Add key dates to see the timeline." />
@@ -2713,7 +2713,7 @@ export default function App() {
                     ))}
                   </div>
                   <button className="btn btn-secondary btn-sm" onClick={() => setShowModal('photo')}>📷</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: today }); setShowModal('event'); }}>+ Log Event</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: today, event_type: 'note' }); setShowModal('event'); }}>+ Log Event</button>
                 </div>
               </div>
 
