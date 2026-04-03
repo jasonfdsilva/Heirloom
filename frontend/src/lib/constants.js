@@ -23,3 +23,10 @@ export const EVENT_TYPES = [
 ];
 
 export const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+export const PLANT_STATUSES = [
+  { value: 'healthy',       label: 'Healthy',        color: '#16a34a' },
+  { value: 'struggling',    label: 'Struggling',     color: '#f59e0b' },
+  { value: 'dead',          label: 'Dead',           color: '#6b7280' },
+  { value: 'harvested-out', label: 'Harvested Out',  color: '#7c3aed' },
+];

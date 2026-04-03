@@ -1,6 +1,11 @@
-import { CATEGORY_COLORS } from './constants';
+import { CATEGORY_COLORS, PLANT_STATUSES } from './constants';
 
 export const catColor = (cat) => CATEGORY_COLORS[cat] || '#6b7280';
+
+export const plantStatusColor = (s) => {
+  const found = PLANT_STATUSES.find(x => x.value === s);
+  return found ? found.color : '#9ca3af';
+};
 
 export const statusColor = (status) => {
   const map = {
