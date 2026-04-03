@@ -236,7 +236,7 @@ const styles = `
 
     /* Modals become bottom sheets */
     .modal-overlay { align-items: flex-end; padding: 0; }
-    .modal { border-radius: 16px 16px 0 0; max-width: 100%; }
+    .modal { border-radius: 16px 16px 0 0; max-width: 100%; max-height: 85dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
 
     /* Hide desktop table, show mobile cards */
     .mobile-hide { display: none; }
@@ -421,34 +421,40 @@ export default function App() {
   const handleCreateEvent = async () => {
     if (!selectedPlanting) return;
     if (!editData.event_type) { setModalError('Please select an event type.'); return; }
-    const payload = {};
-    ['event_date', 'event_type', 'details', 'severity', 'product_used', 'quantity'].forEach(k => {
-      if (editData[k] !== undefined) payload[k] = editData[k];
-    });
-    let savedEventId = editData.id || null;
-    if (editData.id) {
-      await api.put(`/api/events/${editData.id}`, payload);
-    } else {
-      const res = await api.post(`/api/plantings/${selectedPlanting.id}/events`, payload);
-      savedEventId = res.id || null;
+    try {
+      const payload = {};
+      ['event_date', 'event_type', 'details', 'severity', 'product_used', 'quantity'].forEach(k => {
+        if (editData[k] !== undefined) payload[k] = editData[k];
+      });
+      let savedEventId = editData.id || null;
+      if (editData.id) {
+        await api.put(`/api/events/${editData.id}`, payload);
+      } else {
+        const res = await api.post(`/api/plantings/${selectedPlanting.id}/events`, payload);
+        if (!res || res.detail) { setModalError(res?.detail || 'Failed to save event.'); return; }
+        savedEventId = res.id || null;
+      }
+      // Upload any photos attached to this event, linked via event_id
+      const attachedPhotos = (editData._photos || []).filter(f => f instanceof File);
+      const photoDate = payload.event_date || new Date().toISOString().split('T')[0];
+      for (const file of attachedPhotos) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('taken_date', photoDate);
+        formData.append('caption', '');
+        if (savedEventId) formData.append('event_id', String(savedEventId));
+        await api.upload(`/api/plantings/${selectedPlanting.id}/photos`, formData);
+      }
+      if (attachedPhotos.length > 0) loadPhotos(selectedPlanting.id);
+      setShowModal(null); setEditData({});
+      loadData();
+      const updated = await api.get('/api/plantings?year=2026');
+      const refreshed = updated.find(p => p.id === selectedPlanting.id);
+      if (refreshed) setSelectedPlanting(refreshed);
+    } catch (err) {
+      setModalError('Something went wrong. Please try again.');
+      console.error('handleCreateEvent error:', err);
     }
-    // Upload any photos attached to this event, linked via event_id
-    const attachedPhotos = editData._photos || [];
-    const photoDate = payload.event_date || new Date().toISOString().split('T')[0];
-    for (const file of attachedPhotos) {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('taken_date', photoDate);
-      formData.append('caption', '');
-      if (savedEventId) formData.append('event_id', String(savedEventId));
-      await api.upload(`/api/plantings/${selectedPlanting.id}/photos`, formData);
-    }
-    if (attachedPhotos.length > 0) loadPhotos(selectedPlanting.id);
-    setShowModal(null); setEditData({});
-    loadData();
-    const updated = await api.get('/api/plantings?year=2026');
-    const refreshed = updated.find(p => p.id === selectedPlanting.id);
-    if (refreshed) setSelectedPlanting(refreshed);
   };
 
   const handleCreateBulkEvent = async () => {
