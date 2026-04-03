@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import api from './lib/api';
-import { CATEGORY_COLORS, STATUS_LABELS, EVENT_TYPES, MONTHS } from './lib/constants';
+import { STATUS_LABELS, EVENT_TYPES } from './lib/constants';
 import { catColor, statusColor } from './lib/colors';
 import { formatDate } from './lib/formatters';
 import { clusterCells, getSuggestedDates } from './lib/algorithms';
@@ -9,6 +9,8 @@ import usePhotos from './hooks/usePhotos';
 import EmptyState from './components/common/EmptyState';
 import StatCard from './components/common/StatCard';
 import Lightbox from './components/common/Lightbox';
+import Photos from './components/views/Photos';
+import CalendarView from './components/views/CalendarView';
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
@@ -849,94 +851,6 @@ export default function App() {
   };
 
   // ── Calendar View ─────────────────────────────────────────────────────────
-
-  const renderCalendar = () => {
-    const startMonth = 1; // Feb
-    const endMonth = 11; // Dec
-    const monthRange = endMonth - startMonth + 1;
-
-    const dateToPercent = (dateStr) => {
-      if (!dateStr) return null;
-      const d = new Date(dateStr + 'T00:00:00');
-      const dayOfYear = Math.floor((d - new Date(2026, 0, 1)) / 86400000);
-      const startDay = new Date(2026, startMonth, 1);
-      const endDay = new Date(2026, endMonth + 1, 0);
-      const totalDays = Math.floor((endDay - startDay) / 86400000);
-      const offset = Math.floor((d - startDay) / 86400000);
-      return Math.max(0, Math.min(100, (offset / totalDays) * 100));
-    };
-
-    return (
-      <div className="card" style={{ overflowX: 'auto' }}>
-        <div style={{ minWidth: 700 }}>
-          <div className="cal-header">
-            <div className="cal-header-label"></div>
-            <div className="cal-header-months">
-              {MONTHS.slice(startMonth, endMonth + 1).map(m => <span key={m}>{m}</span>)}
-            </div>
-          </div>
-
-          {/* Today line */}
-          <div style={{ position: 'relative' }}>
-            {plantings.map(p => {
-              const bars = [];
-              if (p.indoor_start_date) {
-                const start = dateToPercent(p.indoor_start_date);
-                const end = dateToPercent(p.hardening_date || p.transplant_date || p.indoor_start_date);
-                if (start !== null) bars.push({ left: start, width: Math.max(end - start, 1.5), color: '#8b5cf6', label: 'Indoor' });
-              }
-              if (p.hardening_date) {
-                const start = dateToPercent(p.hardening_date);
-                const end = dateToPercent(p.transplant_date || p.hardening_date);
-                if (start !== null) bars.push({ left: start, width: Math.max(end - start, 1.5), color: '#f59e0b', label: 'Harden' });
-              }
-              if (p.transplant_date || p.direct_sow_date) {
-                const startDate = p.transplant_date || p.direct_sow_date;
-                const isOutdoorProjected = new Date(startDate + 'T00:00:00') > new Date();
-                const start = dateToPercent(startDate);
-                const end = dateToPercent(p.first_harvest_date || '2026-09-30');
-                if (start !== null) bars.push({
-                  left: start,
-                  width: Math.max(end - start, 2),
-                  color: '#16a34a',
-                  label: isOutdoorProjected ? 'Growing (projected)' : 'Growing',
-                  projected: isOutdoorProjected,
-                });
-              }
-
-              return (
-                <div key={p.id} className="cal-row" onClick={() => openPlantingDetail(p)} style={{ cursor: 'pointer' }}>
-                  <div className="cal-label">
-                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: catColor(p.category), marginRight: 6 }}></span>
-                    {p.seed_name}
-                  </div>
-                  <div className="cal-track" style={{ background: '#faf8f5', borderRadius: 4, border: '1px solid #f0ece6' }}>
-                    {MONTHS.slice(startMonth, endMonth + 1).map((m, i) => (
-                      <div key={m} className="cal-month" />
-                    ))}
-                    {bars.map((bar, i) => (
-                      <div key={i} className="cal-bar" style={{
-                        left: bar.left + '%',
-                        width: bar.width + '%',
-                        background: bar.projected ? `${bar.color}30` : bar.color,
-                        border: bar.projected ? `2px dashed ${bar.color}` : 'none',
-                        boxSizing: bar.projected ? 'border-box' : undefined,
-                        opacity: 1,
-                      }} title={bar.label} />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {plantings.length === 0 && (
-            <EmptyState icon="📅" message="No plantings yet. Add some plantings to see your calendar." />
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // ── Modals ─────────────────────────────────────────────────────────────────
 
@@ -2009,27 +1923,6 @@ export default function App() {
     );
   };
 
-  const renderCalendarView = () => (
-    <div>
-      <h1 className="page-title">Planting Calendar</h1>
-      <p className="page-sub">Zone 6b, Last Frost: April 15</p>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#8b5cf6', display: 'inline-block' }}></span> Indoor Start
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#f59e0b', display: 'inline-block' }}></span> Hardening Off
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#16a34a', display: 'inline-block' }}></span> Growing/Outdoor
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-          <span style={{ width: 24, height: 12, borderRadius: 3, background: '#16a34a30', border: '2px dashed #16a34a', boxSizing: 'border-box', display: 'inline-block' }}></span> Projected outdoor
-        </div>
-      </div>
-      {renderCalendar()}
-    </div>
-  );
 
   const renderGardenMapView = () => (
     <div>
@@ -2094,127 +1987,6 @@ export default function App() {
   );
 
   // ── Photos Tab ───────────────────────────────────────────────────────────────
-
-  const renderPhotos = () => {
-    if (allPhotos.length === 0) {
-      return (
-        <div>
-          <h1 className="page-title">Photos</h1>
-          <p className="page-sub">All garden photos across all plantings</p>
-          <EmptyState icon="📷" message="No photos yet. Add photos from a planting's detail view or use the 📷 button on the Plants tab." />
-        </div>
-      );
-    }
-
-    const formatMonthHeader = (yyyymm) => {
-      if (yyyymm === 'unknown') return 'Date Unknown';
-      const [year, month] = yyyymm.split('-');
-      const d = new Date(parseInt(year), parseInt(month) - 1, 1);
-      return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    };
-
-    const renderPhotoCard = (photo) => {
-      const flatIndex = allPhotos.findIndex(p => p.id === photo.id);
-      const label = photosGrouping === 'planting'
-        ? formatDate(photo.taken_date)
-        : (photo.seed_name || 'Unknown');
-      return (
-        <div key={photo.id} className="photo-thumb" onClick={() => setPhotosLightboxIndex(flatIndex)}>
-          <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} loading="lazy" />
-          <div className="photo-thumb-info">
-            {label && <div className="photo-thumb-label">{label}</div>}
-            {photo.caption && <div className="photo-thumb-caption">{photo.caption}</div>}
-          </div>
-        </div>
-      );
-    };
-
-    // Build time groups (YYYY-MM → photos[])
-    const timeGroups = (() => {
-      const map = {};
-      allPhotos.forEach(photo => {
-        const key = photo.taken_date ? photo.taken_date.substring(0, 7) : 'unknown';
-        if (!map[key]) map[key] = [];
-        map[key].push(photo);
-      });
-      return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
-    })();
-
-    // Build planting groups: category → planting → photos (mirrors Plantings tab)
-    const categoryGroups = (() => {
-      // First group by planting
-      const plantingMap = {};
-      allPhotos.forEach(photo => {
-        const key = photo.planting_id ?? 'unknown';
-        if (!plantingMap[key]) plantingMap[key] = { label: photo.seed_name || 'Unknown Planting', category: photo.category || 'Other', photos: [] };
-        plantingMap[key].photos.push(photo);
-      });
-      // Then group plantings by category
-      const catMap = {};
-      Object.entries(plantingMap).forEach(([pid, group]) => {
-        const cat = group.category || 'Other';
-        if (!catMap[cat]) catMap[cat] = [];
-        catMap[cat].push({ pid, label: group.label, photos: group.photos });
-      });
-      // Sort categories alphabetically, plantings within each category alphabetically
-      return Object.entries(catMap)
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([cat, plantings]) => ([cat, plantings.sort((a, b) => a.label.localeCompare(b.label))]));
-    })();
-
-    return (
-      <div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
-          <div>
-            <h1 className="page-title">Photos</h1>
-            <p className="page-sub">{allPhotos.length} photo{allPhotos.length !== 1 ? 's' : ''} across all plantings</p>
-          </div>
-          <div className="photos-toggle">
-            <button className={`photos-toggle-btn ${photosGrouping === 'time' ? 'active' : ''}`} onClick={() => setPhotosGrouping('time')}>By Time</button>
-            <button className={`photos-toggle-btn ${photosGrouping === 'planting' ? 'active' : ''}`} onClick={() => setPhotosGrouping('planting')}>By Planting</button>
-          </div>
-        </div>
-
-        {photosGrouping === 'time' && timeGroups.map(([monthKey, photos]) => (
-          <div key={monthKey} className="photos-group">
-            <div className="photos-group-header">
-              {formatMonthHeader(monthKey)}
-              <span className="photos-group-sub">{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div className="photos-grid">{photos.map(renderPhotoCard)}</div>
-          </div>
-        ))}
-
-        {photosGrouping === 'planting' && categoryGroups.map(([cat, plantingList]) => {
-          const color = catColor(cat);
-          const totalPhotos = plantingList.reduce((s, p) => s + p.photos.length, 0);
-          return (
-            <div key={cat} className="photos-group">
-              {/* Category header — same style as Plantings tab category rows */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: color + '14', borderRadius: 8, marginBottom: 12, borderBottom: `2px solid ${color}30` }}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
-                <span style={{ fontWeight: 700, fontSize: 12, color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cat}</span>
-                <span style={{ fontSize: 12, color: '#8a8580', fontWeight: 400 }}>
-                  {plantingList.length} {plantingList.length === 1 ? 'variety' : 'varieties'} · {totalPhotos} photo{totalPhotos !== 1 ? 's' : ''}
-                </span>
-              </div>
-              {/* Planting sub-groups within category */}
-              {plantingList.map(({ pid, label, photos }) => (
-                <div key={pid} style={{ marginBottom: 20, paddingLeft: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
-                    <span style={{ fontWeight: 600, fontSize: 14, color: '#2d2a24' }}>{label}</span>
-                    <span style={{ fontSize: 12, color: '#8a8580' }}>{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
-                  </div>
-                  <div className="photos-grid">{photos.map(renderPhotoCard)}</div>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
 
   // ── Bed Planner ──────────────────────────────────────────────────────────────
 
@@ -3177,9 +2949,9 @@ export default function App() {
           {view === 'dashboard' && renderDashboard()}
           {view === 'seeds' && renderSeeds()}
           {view === 'plantings' && renderPlantings()}
-          {view === 'calendar' && renderCalendarView()}
+          {view === 'calendar' && <CalendarView plantings={plantings} onPlantingClick={openPlantingDetail} />}
           {view === 'map' && renderGardenMapView()}
-          {view === 'photos' && renderPhotos()}
+          {view === 'photos' && <Photos allPhotos={allPhotos} photosGrouping={photosGrouping} setPhotosGrouping={setPhotosGrouping} setPhotosLightboxIndex={setPhotosLightboxIndex} />}
           {view === 'bed-planner' && renderBedPlanner()}
           {view === 'detail' && renderDetail()}
         </div>
