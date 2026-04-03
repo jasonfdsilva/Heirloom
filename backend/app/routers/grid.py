@@ -21,7 +21,7 @@ def update_grid(
     return grid_service.update_grid(db, structure_id, data)
 
 
-@router.delete("/api/structures/{structure_id}/grid")
+@router.delete("/api/structures/{structure_id}/grid/cells")
 def delete_grid_cells(
     structure_id: str,
     planting_id: int = Query(...),
