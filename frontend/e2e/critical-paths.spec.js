@@ -69,8 +69,24 @@ test('delete a planting and verify it is removed from the list', async ({ page }
 test('navigate to planting detail and see the Log Event button', async ({ page }) => {
   await page.goto('/');
 
-  // Use the Dashboard "Recent Plantings" card — same approach as smoke test 3
+  // Ensure at least one planting exists — CI starts with an empty DB
+  await page.locator('.nav-link', { hasText: 'Plantings' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Plantings');
+
+  const hasPlantings = await page.locator('tbody tr').count();
+  if (hasPlantings === 0) {
+    await page.locator('button', { hasText: '+ New Planting' }).first().click();
+    await expect(page.locator('.modal-title')).toContainText('New Planting');
+    await page.locator('select.form-input').first().selectOption({ index: 2 });
+    await page.locator('.modal-actions button.btn-primary').click();
+    await expect(page.locator('.modal-title')).not.toBeVisible();
+    await expect(page.locator('tbody tr')).not.toHaveCount(0, { timeout: 8000 });
+  }
+
+  // Go to Dashboard and click the first item in "Recent Plantings" to open detail
+  await page.goto('/');
   const recentCard = page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Recent Plantings' }) });
+  await expect(recentCard.locator('div[style*="cursor: pointer"]').first()).toBeVisible({ timeout: 10000 });
   await recentCard.locator('div[style*="cursor: pointer"]').first().click();
 
   // Detail view loads

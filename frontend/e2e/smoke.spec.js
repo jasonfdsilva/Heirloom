@@ -38,7 +38,8 @@ test('create a new planting and it appears in the list', async ({ page }) => {
   await page.locator('.modal-actions button.btn-primary').click();
   await expect(page.locator('.modal-title')).not.toBeVisible();
 
-  // A new planting row appears in the table
+  // Wait for the list to update — loadData() is async, especially on a cold CI DB
+  await expect(page.locator('tbody tr')).not.toHaveCount(before, { timeout: 8000 });
   const after = await page.locator('tbody tr').count();
   expect(after).toBeGreaterThan(before);
 });
