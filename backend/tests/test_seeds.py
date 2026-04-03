@@ -99,3 +99,48 @@ def test_patch_seed_label(client):
     list_r = client.get("/api/seeds")
     pepper = next(s for s in list_r.json() if s["id"] == "test-pepper")
     assert pepper["short_label"] == "SH"
+
+
+def test_create_seed_collision_gets_suffix(client):
+    payload = {
+        "name": "Collision Radish",
+        "variety": None,
+        "category": "Root Vegetables",
+        "species": None,
+        "days_to_maturity": "24",
+        "germ_rate": 0.90,
+        "lot": None,
+        "sku": None,
+        "organic": False,
+        "supplier": None,
+        "min_seeds": 50,
+        "start_indoors": False,
+        "direct_sow": True,
+        "suggested_indoor_weeks": 0,
+        "spacing_inches": 3,
+        "notes": None,
+    }
+    # First create — gets "collision-radish"
+    r1 = client.post("/api/seeds", json=payload)
+    assert r1.status_code == 200
+    assert r1.json()["id"] == "collision-radish"
+
+    # Second create with same name — gets "collision-radish-1"
+    r2 = client.post("/api/seeds", json=payload)
+    assert r2.status_code == 200
+    assert r2.json()["id"] == "collision-radish-1"
+
+    # Third — gets "collision-radish-2"
+    r3 = client.post("/api/seeds", json=payload)
+    assert r3.status_code == 200
+    assert r3.json()["id"] == "collision-radish-2"
+
+
+def test_patch_seed_image_url(client):
+    url = "https://example.com/lettuce.jpg"
+    r = client.patch("/api/seeds/test-lettuce/image", json={"image_url": url})
+    assert r.status_code == 200
+
+    seeds = client.get("/api/seeds").json()
+    lettuce = next(s for s in seeds if s["id"] == "test-lettuce")
+    assert lettuce["image_url"] == url
