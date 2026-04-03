@@ -2,6 +2,12 @@
 name = "heirloom"
 version = "0.1.0"
 requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "aiofiles",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -11,4 +17,4 @@ asyncio_mode = "auto"
 select = ["E", "F", "W"]
 
 [dependency-groups]
-dev = ["pytest", "httpx"]
+dev = ["pytest", "pytest-asyncio", "httpx"]
