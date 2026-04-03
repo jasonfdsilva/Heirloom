@@ -1,5 +1,46 @@
 import { test, expect } from '@playwright/test';
 
+// Track IDs of plantings created during this run so we can delete them in cleanup
+const createdPlantingIds = [];
+
+// Helper: create a planting via the UI, capture its ID, return it
+async function createPlanting(page) {
+  await page.locator('.nav-link', { hasText: 'Plantings' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Plantings');
+
+  // Snapshot existing planting IDs before creation
+  const beforeResp = await page.request.get('/api/plantings');
+  const beforeIds = new Set((await beforeResp.json()).map(p => p.id));
+  const before = beforeIds.size;
+
+  // Open the New Planting modal
+  await page.locator('button', { hasText: '+ New Planting' }).first().click();
+  await expect(page.locator('.modal-title')).toContainText('New Planting');
+
+  // Select the first real seed (index 0 = placeholder, 1 = "+ Add custom", 2+ = real seeds)
+  const seedSelect = page.locator('select.form-input').first();
+  await seedSelect.selectOption({ index: 2 });
+
+  await page.locator('.modal-actions button.btn-primary').click();
+  await expect(page.locator('.modal-title')).not.toBeVisible();
+
+  // Capture the new planting's ID via the API so we can clean it up later
+  const afterResp = await page.request.get('/api/plantings');
+  const afterList = await afterResp.json();
+  const newPlanting = afterList.find(p => !beforeIds.has(p.id));
+  if (newPlanting) createdPlantingIds.push(newPlanting.id);
+
+  return { before, after: afterList.length, id: newPlanting?.id, seedName: newPlanting?.seed_name };
+}
+
+// Clean up all plantings created during this test run
+test.afterAll(async ({ request }) => {
+  for (const id of createdPlantingIds) {
+    await request.delete(`/api/plantings/${id}`).catch(() => {});
+  }
+  createdPlantingIds.length = 0;
+});
+
 // ── 1. Dashboard loads ────────────────────────────────────────────────────────
 
 test('dashboard loads with stat cards', async ({ page }) => {
@@ -21,26 +62,10 @@ test('dashboard loads with stat cards', async ({ page }) => {
 test('create a new planting and it appears in the list', async ({ page }) => {
   await page.goto('/');
 
-  // Navigate to Plantings and count current entries
-  await page.locator('.nav-link', { hasText: 'Plantings' }).click();
-  await expect(page.locator('h1.page-title')).toContainText('Plantings');
-  const before = await page.locator('tbody tr').count();
-
-  // Open the New Planting modal
-  await page.locator('button', { hasText: '+ New Planting' }).first().click();
-  await expect(page.locator('.modal-title')).toContainText('New Planting');
-
-  // Select the first real seed (index 0 = placeholder, 1 = "+ Add custom", 2+ = real seeds)
-  const seedSelect = page.locator('select.form-input').first();
-  await seedSelect.selectOption({ index: 2 });
-
-  // Submit
-  await page.locator('.modal-actions button.btn-primary').click();
-  await expect(page.locator('.modal-title')).not.toBeVisible();
+  const { before, after } = await createPlanting(page);
 
   // Wait for the list to update — loadData() is async, especially on a cold CI DB
   await expect(page.locator('tbody tr')).not.toHaveCount(before, { timeout: 8000 });
-  const after = await page.locator('tbody tr').count();
   expect(after).toBeGreaterThan(before);
 });
 
@@ -49,8 +74,20 @@ test('create a new planting and it appears in the list', async ({ page }) => {
 test('log an event on an existing planting and it appears in the timeline', async ({ page }) => {
   await page.goto('/');
 
+  // Ensure at least one planting exists (CI starts with empty DB; test 2 may have run first)
+  await page.locator('.nav-link', { hasText: 'Plantings' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Plantings');
+
+  const rowCount = await page.locator('tbody tr').count();
+  if (rowCount === 0) {
+    await createPlanting(page);
+    await expect(page.locator('tbody tr')).not.toHaveCount(0, { timeout: 8000 });
+  }
+
   // Click the first planting from the Dashboard "Recent Plantings" card
+  await page.goto('/');
   const recentCard = page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Recent Plantings' }) });
+  await expect(recentCard.locator('div[style*="cursor: pointer"]').first()).toBeVisible({ timeout: 10000 });
   await recentCard.locator('div[style*="cursor: pointer"]').first().click();
 
   // Should be on detail view — Log Event button is a primary button

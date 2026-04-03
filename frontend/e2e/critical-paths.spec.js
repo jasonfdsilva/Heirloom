@@ -1,20 +1,44 @@
 import { test, expect } from '@playwright/test';
 
-// Helper: create a planting and return to the plantings list
+// Track IDs of plantings created during this run so we can delete them in cleanup
+const createdPlantingIds = [];
+
+// Helper: create a planting via the UI, capture its ID and seed name, return them
 async function createPlanting(page) {
   await page.locator('.nav-link', { hasText: 'Plantings' }).click();
   await expect(page.locator('h1.page-title')).toContainText('Plantings');
-  const before = await page.locator('tbody tr').count();
+
+  // Snapshot existing planting IDs before creation
+  const beforeResp = await page.request.get('/api/plantings');
+  const beforeIds = new Set((await beforeResp.json()).map(p => p.id));
+  const before = beforeIds.size;
+
   await page.locator('button', { hasText: '+ New Planting' }).first().click();
   await expect(page.locator('.modal-title')).toContainText('New Planting');
   const seedSelect = page.locator('select.form-input').first();
   await seedSelect.selectOption({ index: 2 });
+  // Capture the seed name so we can find the row in the table later
+  const seedName = await seedSelect.evaluate(el => el.options[el.selectedIndex].text.trim());
   await page.locator('.modal-actions button.btn-primary').click();
   await expect(page.locator('.modal-title')).not.toBeVisible();
-  const after = await page.locator('tbody tr').count();
-  expect(after).toBeGreaterThan(before);
-  return { before, after };
+
+  // Wait for the list to update and capture the new planting's ID
+  await expect(page.locator('tbody tr')).not.toHaveCount(before, { timeout: 8000 });
+  const afterResp = await page.request.get('/api/plantings');
+  const afterList = await afterResp.json();
+  const newPlanting = afterList.find(p => !beforeIds.has(p.id));
+  if (newPlanting) createdPlantingIds.push(newPlanting.id);
+
+  return { before, after: afterList.length, id: newPlanting?.id, seedName };
 }
+
+// Clean up all plantings created during this test run
+test.afterAll(async ({ request }) => {
+  for (const id of createdPlantingIds) {
+    await request.delete(`/api/plantings/${id}`).catch(() => {});
+  }
+  createdPlantingIds.length = 0;
+});
 
 // ── 5. Edit a seed's short label ─────────────────────────────────────────────
 
@@ -47,7 +71,7 @@ test('edit a seed short label and verify it saves', async ({ page }) => {
 
 test('delete a planting and verify it is removed from the list', async ({ page }) => {
   await page.goto('/');
-  await createPlanting(page);
+  const { id, seedName } = await createPlanting(page);
 
   // Capture count after creation
   const afterCreate = await page.locator('tbody tr').count();
@@ -55,13 +79,18 @@ test('delete a planting and verify it is removed from the list', async ({ page }
   // Accept the confirmation dialog automatically
   page.on('dialog', dialog => dialog.accept());
 
-  // Delete the last planting row (the one we just created)
-  const rows = page.locator('tbody tr');
-  const lastRow = rows.last();
-  await lastRow.locator('button').last().click();
+  // Find the specific row containing our newly created planting.
+  // The dropdown option may include "(OG)" or other suffixes not shown in the table,
+  // so use the base name (text before any parenthetical) for matching.
+  const baseName = seedName.split('(')[0].trim();
+  const targetRow = page.locator('tbody tr').filter({ hasText: baseName }).first();
+  await targetRow.locator('button').last().click();
 
   // Row count must be less than after-create (handles category header removal too)
   await expect(page.locator('tbody tr')).not.toHaveCount(afterCreate, { timeout: 5000 });
+
+  // Remove from cleanup list since it's already deleted via the UI
+  createdPlantingIds.splice(createdPlantingIds.indexOf(id), 1);
 });
 
 // ── 7. Open planting detail and verify the Log Event button is present ────────
@@ -75,12 +104,7 @@ test('navigate to planting detail and see the Log Event button', async ({ page }
 
   const hasPlantings = await page.locator('tbody tr').count();
   if (hasPlantings === 0) {
-    await page.locator('button', { hasText: '+ New Planting' }).first().click();
-    await expect(page.locator('.modal-title')).toContainText('New Planting');
-    await page.locator('select.form-input').first().selectOption({ index: 2 });
-    await page.locator('.modal-actions button.btn-primary').click();
-    await expect(page.locator('.modal-title')).not.toBeVisible();
-    await expect(page.locator('tbody tr')).not.toHaveCount(0, { timeout: 8000 });
+    await createPlanting(page);
   }
 
   // Go to Dashboard and click the first item in "Recent Plantings" to open detail
