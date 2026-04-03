@@ -1,0 +1,33 @@
+# docker-compose.dev.yml — Dev/sandbox instance
+#
+# Runs on port 8086 with isolated volumes.
+# NEVER used in CI. Production runs on port 8085 (docker-compose.yml).
+#
+# Usage:
+#   Start:    docker compose -f docker-compose.dev.yml up -d --build
+#   Snapshot: bash scripts/snapshot-to-dev.sh
+#   Stop:     docker compose -f docker-compose.dev.yml down
+#
+# From frontend/:
+#   npm run sandbox:up
+#   npm run sandbox:snapshot
+#   npm run sandbox:down
+
+name: heirloom-dev
+
+services:
+  heirloom-dev:
+    build: .
+    container_name: heirloom-dev
+    ports:
+      - "8086:8000"
+    volumes:
+      - heirloom-dev-data:/app/data
+      - heirloom-dev-photos:/app/photos
+    environment:
+      - DATABASE_URL=sqlite:////app/data/heirloom.db
+      - PHOTOS_DIR=/app/photos
+
+volumes:
+  heirloom-dev-data:
+  heirloom-dev-photos:

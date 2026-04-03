@@ -7,7 +7,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:8085',
+    baseURL: process.env.BASE_URL || 'http://localhost:8086',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },

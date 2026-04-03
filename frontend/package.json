@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "sandbox:up": "docker compose -f ../docker-compose.dev.yml up -d --build",
+    "sandbox:down": "docker compose -f ../docker-compose.dev.yml down",
+    "sandbox:snapshot": "cd .. && bash scripts/snapshot-to-dev.sh"
   },
   "dependencies": {
     "react": "^18.2.0",
