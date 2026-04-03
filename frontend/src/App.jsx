@@ -1,9 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import api from './lib/api';
 import { CATEGORY_COLORS, STATUS_LABELS, EVENT_TYPES, MONTHS } from './lib/constants';
 import { catColor, statusColor } from './lib/colors';
 import { formatDate } from './lib/formatters';
 import { clusterCells, getSuggestedDates } from './lib/algorithms';
+import useAppData from './hooks/useAppData';
+import usePhotos from './hooks/usePhotos';
+import EmptyState from './components/common/EmptyState';
+import StatCard from './components/common/StatCard';
+import Lightbox from './components/common/Lightbox';
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
@@ -233,15 +238,11 @@ const styles = `
 
 export default function App() {
   const [view, setView] = useState('dashboard');
-  const [seeds, setSeeds] = useState([]);
-  const [structures, setStructures] = useState([]);
-  const [plantings, setPlantings] = useState([]);
   const [selectedPlanting, setSelectedPlanting] = useState(null);
   const [showModal, setShowModal] = useState(null); // 'planting', 'event', 'photo'
   const [editData, setEditData] = useState({});
   const [modalError, setModalError] = useState(null);
   const [showPlantingSummary, setShowPlantingSummary] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [plantingPhotos, setPlantingPhotos] = useState([]);
   const [mapHighlight, setMapHighlight] = useState(null);
@@ -249,8 +250,6 @@ export default function App() {
   const [mapZoom, setMapZoom] = useState(1.25);
   const [selectedBed, setSelectedBed] = useState(null);
   const [gridCells, setGridCells] = useState([]);
-  const [mapGridCells, setMapGridCells] = useState({});
-  const [labelPositions, setLabelPositions] = useState({});
   const [isDirtyLabels, setIsDirtyLabels] = useState(false);
   const [draggingLabel, setDraggingLabel] = useState(null);
   const mapSvgRef = useRef(null);
@@ -265,33 +264,24 @@ export default function App() {
   const [expandedPlantingIds, setExpandedPlantingIds] = useState(new Set());
   const [collapsedCategories, setCollapsedCategories] = useState(new Set());
   const [collapsedSeedCategories, setCollapsedSeedCategories] = useState(new Set());
-  const [allPhotos, setAllPhotos] = useState([]);
-  const [photosGrouping, setPhotosGrouping] = useState('time');
-  const [photosLightboxIndex, setPhotosLightboxIndex] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
 
-  const loadData = useCallback(async () => {
-    try {
-      const [s, st, p] = await Promise.all([
-        api.get('/api/seeds'),
-        api.get('/api/structures'),
-        api.get('/api/plantings?year=2026'),
-      ]);
-      setSeeds(s); setStructures(st); setPlantings(p);
-      // Load all grid cells for garden map summary view
-      const [gridResults, labelPos] = await Promise.all([
-        Promise.all(st.map(str => api.get(`/api/structures/${str.id}/grid`).then(cells => [str.id, cells]))),
-        api.get('/api/label-positions'),
-      ]);
-      const gridMap = {};
-      gridResults.forEach(([sid, cells]) => { gridMap[sid] = cells; });
-      setMapGridCells(gridMap);
-      const posMap = {};
-      labelPos.forEach(p => { posMap[`${p.entity_type}:${p.entity_id}`] = { x: p.label_x, y: p.label_y, orientation: p.orientation || 'horizontal', hidden: !!p.hidden, label_text: p.label_text || null }; });
-      setLabelPositions(posMap);
-    } catch (e) { console.error('Load failed:', e); }
-    setLoading(false);
-  }, []);
+  const {
+    seeds, setSeeds,
+    structures, setStructures,
+    plantings, setPlantings,
+    loading,
+    mapGridCells, setMapGridCells,
+    labelPositions, setLabelPositions,
+    loadData,
+  } = useAppData();
+
+  const {
+    allPhotos, setAllPhotos,
+    photosGrouping, setPhotosGrouping,
+    photosLightboxIndex, setPhotosLightboxIndex,
+    loadAllPhotos,
+  } = usePhotos();
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -314,26 +304,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [lightboxIndex, plantingPhotos.length]);
 
-  // Photos tab lightbox keyboard navigation
-  useEffect(() => {
-    if (photosLightboxIndex === null) return;
-    const handler = (e) => {
-      if (e.key === 'ArrowRight') setPhotosLightboxIndex(i => Math.min(i + 1, allPhotos.length - 1));
-      if (e.key === 'ArrowLeft')  setPhotosLightboxIndex(i => Math.max(i - 1, 0));
-      if (e.key === 'Escape')     setPhotosLightboxIndex(null);
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [photosLightboxIndex, allPhotos.length]);
-
   const loadPhotos = async (plantingId) => {
     const photos = await api.get(`/api/plantings/${plantingId}/photos`);
     setPlantingPhotos(photos);
-  };
-
-  const loadAllPhotos = async () => {
-    const photos = await api.get('/api/photos');
-    setAllPhotos(photos);
   };
 
   const openPlantPanel = async (plantGuid) => {
@@ -958,10 +931,7 @@ export default function App() {
           </div>
 
           {plantings.length === 0 && (
-            <div className="empty">
-              <div className="empty-icon">📅</div>
-              <p>No plantings yet. Add some plantings to see your calendar.</p>
-            </div>
+            <EmptyState icon="📅" message="No plantings yet. Add some plantings to see your calendar." />
           )}
         </div>
       </div>
@@ -1352,22 +1322,10 @@ export default function App() {
       <p className="page-sub">Garden Tracker, Berkeley Heights NJ, Zone 6b, 2026 Season</p>
 
       <div className="grid-4" style={{ marginBottom: 24 }}>
-        <div className="stat-card">
-          <div className="stat-value">{seeds.length}</div>
-          <div className="stat-label">Seed Varieties</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{totalStarted}</div>
-          <div className="stat-label">Started</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{totalPlanted}</div>
-          <div className="stat-label">Planted / Projected</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{harvestingCount}</div>
-          <div className="stat-label">Harvesting</div>
-        </div>
+        <StatCard value={seeds.length} label="Seed Varieties" />
+        <StatCard value={totalStarted} label="Started" />
+        <StatCard value={totalPlanted} label="Planted / Projected" />
+        <StatCard value={harvestingCount} label="Harvesting" />
       </div>
 
       <div className="grid-2">
@@ -1391,10 +1349,7 @@ export default function App() {
               </div>
             ))}
             {plantings.length === 0 && (
-              <div className="empty">
-                <div className="empty-icon">🌱</div>
-                <p>No plantings yet. Click "Add Planting" to get started!</p>
-              </div>
+              <EmptyState icon="🌱" message='No plantings yet. Click "Add Planting" to get started!' />
             )}
           </div>
         </div>
@@ -1997,20 +1952,14 @@ export default function App() {
           );
         })()}
         {plantings.length === 0 && (
-          <div className="empty">
-            <div className="empty-icon">🌱</div>
-            <p>No plantings yet. Click "New Planting" to add your first one.</p>
-          </div>
+          <EmptyState icon="🌱" message='No plantings yet. Click "New Planting" to add your first one.' />
         )}
       </div>
 
       {/* Mobile planting card list */}
       <div className="mobile-planting-list">
         {plantings.length === 0 && (
-          <div className="empty">
-            <div className="empty-icon">🌱</div>
-            <p>No plantings yet.</p>
-          </div>
+          <EmptyState icon="🌱" message="No plantings yet." />
         )}
         {[...plantings].sort((a, b) => a.category.localeCompare(b.category) || a.seed_name.localeCompare(b.seed_name)).map(p => {
           const todayStr = new Date().toISOString().split('T')[0];
@@ -2152,10 +2101,7 @@ export default function App() {
         <div>
           <h1 className="page-title">Photos</h1>
           <p className="page-sub">All garden photos across all plantings</p>
-          <div className="empty">
-            <div className="empty-icon">📷</div>
-            <p>No photos yet. Add photos from a planting's detail view or use the 📷 button on the Plants tab.</p>
-          </div>
+          <EmptyState icon="📷" message="No photos yet. Add photos from a planting's detail view or use the 📷 button on the Plants tab." />
         </div>
       );
     }
@@ -2916,9 +2862,7 @@ export default function App() {
                     <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: today }); setShowModal('event'); }}>+ Log Event</button>
                   </div>
                 </div>
-                <div className="empty" style={{ padding: 16 }}>
-                  <p style={{ fontSize: 13 }}>No dates or events yet. Add key dates to see the timeline.</p>
-                </div>
+                <EmptyState style={{ padding: 16 }} message="No dates or events yet. Add key dates to see the timeline." />
               </div>
             );
           }
@@ -3369,65 +3313,27 @@ export default function App() {
 
         {renderPlantPanel()}
 
-        {photosLightboxIndex !== null && allPhotos[photosLightboxIndex] && (() => {
-          const photo = allPhotos[photosLightboxIndex];
-          const total = allPhotos.length;
-          return (
-            <div className="lightbox" onClick={() => setPhotosLightboxIndex(null)}>
-              <button onClick={e => { e.stopPropagation(); setPhotosLightboxIndex(null); }}
-                style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 20, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-              {photo.seed_name && (
-                <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.75)', fontSize: 13, pointerEvents: 'none', whiteSpace: 'nowrap' }}>{photo.seed_name}</div>
-              )}
-              {photosLightboxIndex > 0 && (
-                <button onClick={e => { e.stopPropagation(); setPhotosLightboxIndex(i => i - 1); }}
-                  style={{ position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-              )}
-              <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} onClick={e => e.stopPropagation()} />
-              {photosLightboxIndex < total - 1 && (
-                <button onClick={e => { e.stopPropagation(); setPhotosLightboxIndex(i => i + 1); }}
-                  style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
-              )}
-              <div style={{ position: 'absolute', bottom: 24, textAlign: 'center', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-                {photo.caption && <div className="lightbox-caption">{photo.caption}</div>}
-                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>{photosLightboxIndex + 1} / {total} · {formatDate(photo.taken_date)}</div>
-              </div>
-            </div>
-          );
-        })()}
+        {photosLightboxIndex !== null && (
+          <Lightbox
+            photos={allPhotos}
+            index={photosLightboxIndex}
+            onClose={() => setPhotosLightboxIndex(null)}
+            onPrev={() => setPhotosLightboxIndex(i => i - 1)}
+            onNext={() => setPhotosLightboxIndex(i => i + 1)}
+            titleKey="seed_name"
+          />
+        )}
 
-        {lightboxIndex !== null && plantingPhotos[lightboxIndex] && (() => {
-          const photo = plantingPhotos[lightboxIndex];
-          const total = plantingPhotos.length;
-          // Keyboard nav effect — inline via useEffect equivalent via event listener
-          return (
-            <div className="lightbox" onClick={() => setLightboxIndex(null)}>
-              {/* Close */}
-              <button onClick={e => { e.stopPropagation(); setLightboxIndex(null); }}
-                style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 20, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-              {/* Delete */}
-              <button onClick={e => { e.stopPropagation(); if (window.confirm('Delete this photo?')) handleDeletePhoto(photo.id); }}
-                style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(220,38,38,0.7)', border: 'none', color: '#fff', fontSize: 16, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                title="Delete photo">🗑</button>
-              {/* Prev */}
-              {lightboxIndex > 0 && (
-                <button onClick={e => { e.stopPropagation(); setLightboxIndex(i => i - 1); }}
-                  style={{ position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-              )}
-              <img src={`/photos/${photo.filename}`} alt={photo.caption || ''} onClick={e => e.stopPropagation()} />
-              {/* Next */}
-              {lightboxIndex < total - 1 && (
-                <button onClick={e => { e.stopPropagation(); setLightboxIndex(i => i + 1); }}
-                  style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 32, width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
-              )}
-              <div style={{ position: 'absolute', bottom: 24, textAlign: 'center' }}>
-                {photo.caption && <div className="lightbox-caption">{photo.caption}</div>}
-                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>{lightboxIndex + 1} / {total} · {formatDate(photo.taken_date)}</div>
-              </div>
-            </div>
-          );
-        })()
-        }
+        {lightboxIndex !== null && (
+          <Lightbox
+            photos={plantingPhotos}
+            index={lightboxIndex}
+            onClose={() => setLightboxIndex(null)}
+            onPrev={() => setLightboxIndex(i => i - 1)}
+            onNext={() => setLightboxIndex(i => i + 1)}
+            onDelete={handleDeletePhoto}
+          />
+        )}
       </div>
     </>
   );
