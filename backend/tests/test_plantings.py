@@ -126,6 +126,31 @@ def test_duplicate_planting(client):
     assert len(pepper_plantings) == 2
 
 
+def test_duplicate_planting_not_found(client):
+    r = client.post("/api/plantings/99999/duplicate")
+    assert r.status_code == 404
+
+
+def test_update_family_notes(client):
+    created = _create_planting(client)
+    planting_id = created["id"]
+
+    r = client.patch(
+        f"/api/plantings/{planting_id}/family-notes",
+        json={"notes": "Great producer last year"},
+    )
+    assert r.status_code == 200
+    assert r.json()["message"] == "Family notes updated"
+
+
+def test_update_family_notes_not_found(client):
+    r = client.patch(
+        "/api/plantings/99999/family-notes",
+        json={"notes": "This should 404"},
+    )
+    assert r.status_code == 404
+
+
 def test_create_planting_invalid_seed(client):
     r = client.post(
         "/api/plantings",

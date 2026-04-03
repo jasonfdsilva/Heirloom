@@ -74,6 +74,53 @@ def test_upload_photo_appears_in_list(client, tmp_path, monkeypatch):
     assert all_r.json()[0]["seed_name"] == "Buttercrunch Lettuce"
 
 
+def test_upload_photo_planting_not_found(client):
+    fake_image = io.BytesIO(b"fake-jpeg-data")
+    r = client.post(
+        "/api/plantings/99999/photos",
+        files={"file": ("test.jpg", fake_image, "image/jpeg")},
+        data={"caption": "", "taken_date": "", "event_id": ""},
+    )
+    assert r.status_code == 404
+
+
+def test_list_plant_photos_empty(client):
+    r = client.get("/api/plants/nonexistent-guid-abc123/photos")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_list_plant_photos_with_data(client, tmp_path, monkeypatch):
+    """Upload a photo linked to a plant_guid and verify it's returned."""
+    import backend.app.services.photo_service as ps
+    monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))
+
+    pid = _create_planting(client)
+    # Paint a grid cell to create a plant_guid, then read back the grid
+    paint_r = client.post("/api/structures/test-bed-1/grid", json={
+        "planting_id": pid,
+        "cells": [{"row": 0, "col": 0}],
+    })
+    assert paint_r.status_code == 200
+    grid_r = client.get("/api/structures/test-bed-1/grid")
+    cells = grid_r.json()
+    assert cells, "Expected at least one cell after painting"
+    plant_guid = cells[0]["plant_guid"]
+
+    # Upload a photo tagged to this plant_guid
+    upload_r = client.post(
+        f"/api/plants/{plant_guid}/photos",
+        files={"file": ("plant.jpg", io.BytesIO(b"img"), "image/jpeg")},
+        data={"planting_id": str(pid), "caption": "closeup", "taken_date": ""},
+    )
+    assert upload_r.status_code == 200
+
+    list_r = client.get(f"/api/plants/{plant_guid}/photos")
+    assert list_r.status_code == 200
+    assert len(list_r.json()) == 1
+    assert list_r.json()[0]["caption"] == "closeup"
+
+
 def test_delete_photo(client, tmp_path, monkeypatch):
     import backend.app.services.photo_service as ps
     monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))

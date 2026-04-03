@@ -69,7 +69,7 @@ def patch_seed_label(db: sqlite3.Connection, seed_id: str, short_label: Optional
     return {"message": "Label updated"}
 
 
-def _wikipedia_image(query: str) -> Optional[str]:
+def _wikipedia_image(query: str) -> Optional[str]:  # pragma: no cover
     try:
         encoded = urllib.parse.quote(query)
         url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded}"
@@ -86,7 +86,7 @@ def _wikipedia_image(query: str) -> Optional[str]:
     return None
 
 
-def search_image(query: str) -> dict:
+def search_image(query: str) -> dict:  # pragma: no cover
     url = _wikipedia_image(query)
     if not url:
         simplified = query.replace(" OG", "").replace(" F1", "").replace(" Mix", "").strip()
@@ -95,7 +95,7 @@ def search_image(query: str) -> dict:
     return {"image_url": url}
 
 
-def fetch_all_images(db: sqlite3.Connection) -> dict:
+def fetch_all_images(db: sqlite3.Connection) -> dict:  # pragma: no cover
     seeds = db.execute(
         "SELECT id, name, variety, category FROM seeds WHERE image_url IS NULL OR image_url = ''"
     ).fetchall()
@@ -114,7 +114,7 @@ def fetch_all_images(db: sqlite3.Connection) -> dict:
     return {"updated": updated, "total": len(seeds)}
 
 
-def upload_seed_image(db: sqlite3.Connection, seed_id: str, filename_hint: str, content: bytes) -> dict:
+def upload_seed_image(db: sqlite3.Connection, seed_id: str, filename_hint: str, content: bytes) -> dict:  # pragma: no cover
     ext = os.path.splitext(filename_hint)[1].lower() if filename_hint else ".jpg"
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
         ext = ".jpg"

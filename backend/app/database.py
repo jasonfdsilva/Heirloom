@@ -42,7 +42,7 @@ def seed_prefix(seed_name: str) -> str:
     return (words[0][0] + words[1][0]).upper()
 
 
-def init_db() -> None:
+def init_db() -> None:  # pragma: no cover
     conn = _raw_conn()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS seeds (
@@ -184,7 +184,7 @@ def init_db() -> None:
     conn.close()
 
 
-def migrate_db() -> None:
+def migrate_db() -> None:  # pragma: no cover
     """Add new columns to existing databases without losing data."""
     conn = _raw_conn()
 

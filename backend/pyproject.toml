@@ -17,4 +17,9 @@ asyncio_mode = "auto"
 select = ["E", "F", "W"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-asyncio", "httpx"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "pytest-cov>=7.1.0",
+]

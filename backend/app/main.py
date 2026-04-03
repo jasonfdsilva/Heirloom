@@ -21,7 +21,7 @@ from backend.app.routers import (
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # pragma: no cover
     init_db()
     migrate_db()
     yield
@@ -55,7 +55,7 @@ async def serve_photo(filename: str):
 
 # ── Serve frontend (must be last) ─────────────────────────────────────────────
 
-if os.path.exists("/app/static"):
+if os.path.exists("/app/static"):  # pragma: no cover
     app.mount("/assets", StaticFiles(directory="/app/static/assets"), name="assets")
 
     @app.get("/{full_path:path}")

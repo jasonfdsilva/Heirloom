@@ -88,6 +88,73 @@ def test_import_clears_existing_data(client):
     assert len(client.get("/api/export").json()["plantings"]) == 1
 
 
+def test_import_with_photos_grid_cells_harvests(client):
+    """Import payload that exercises photos, grid_cells, and plant_harvests branches."""
+    pid = _seed_planting(client)
+
+    # Build a full import payload with all optional tables populated
+    payload = {
+        "seeds": [
+            {
+                "id": "test-lettuce", "name": "Buttercrunch Lettuce", "variety": "Buttercrunch",
+                "category": "Greens", "species": "Lactuca sativa", "days_to_maturity": "55",
+                "germ_rate": 0.90, "lot": None, "sku": None, "organic": 1,
+                "supplier": "Johnny's", "min_seeds": 50, "start_indoors": 1, "direct_sow": 1,
+                "suggested_indoor_weeks": 6, "spacing_inches": 8, "notes": None,
+            }
+        ],
+        "structures": [
+            {
+                "id": "test-bed-1", "name": "Raised Bed 1", "type": "raised_bed",
+                "width": 4.0, "length": 8.0, "map_x": 100.0, "map_y": 50.0,
+            }
+        ],
+        "plantings": [
+            {
+                "id": pid, "seed_id": "test-lettuce", "structure_id": None, "year": 2026,
+                "quantity": 4, "indoor_start_date": "2026-03-01", "hardening_date": None,
+                "transplant_date": None, "direct_sow_date": None, "first_harvest_date": None,
+                "status": "planned", "notes": None, "created_at": None, "updated_at": None,
+            }
+        ],
+        "events": [],
+        "photos": [
+            {
+                "id": 1, "planting_id": pid, "filename": "test_photo.jpg",
+                "original_name": "test_photo.jpg", "caption": "First sprouts",
+                "taken_date": "2026-03-15", "created_at": None,
+            }
+        ],
+        "grid_cells": [
+            {
+                "id": 1, "planting_id": pid, "structure_id": "test-bed-1",
+                "row": 0, "col": 0, "plant_guid": "abc-123",
+                "short_id": "BL-01", "plant_status": "healthy",
+                "plant_notes": None, "label_visible": 1,
+            }
+        ],
+        "plant_harvests": [
+            {
+                "id": 1, "plant_guid": "abc-123", "harvest_date": "2026-06-01",
+                "weight_oz": 2.5, "count": 3, "notes": "First harvest",
+                "created_at": None,
+            }
+        ],
+    }
+
+    r = client.post("/api/import", json=payload)
+    assert r.status_code == 200
+
+    # Verify all tables were populated
+    export = client.get("/api/export").json()
+    assert len(export["photos"]) == 1
+    assert export["photos"][0]["caption"] == "First sprouts"
+    assert len(export["grid_cells"]) == 1
+    assert export["grid_cells"][0]["plant_guid"] == "abc-123"
+    assert len(export["plant_harvests"]) == 1
+    assert export["plant_harvests"][0]["weight_oz"] == 2.5
+
+
 def test_export_roundtrip_preserves_seed_fields(client):
     export_data = client.get("/api/export").json()
     lettuce = next(s for s in export_data["seeds"] if s["id"] == "test-lettuce")
