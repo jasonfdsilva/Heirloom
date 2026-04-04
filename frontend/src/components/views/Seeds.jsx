@@ -105,19 +105,29 @@ export default function Seeds({
     if (!seedLots.length) return null;
     return seedLots.map(lot => (
       <tr key={`lot-${lot.id}`} style={{ background: color + '08' }}>
-        <td colSpan={showLotCode ? 2 : 1} style={{ paddingLeft: 40, fontSize: 12, color: '#8a8580' }}>
-          {showLotCode && (
-            <span style={{ fontFamily: 'monospace', color: '#5a7a5a', fontWeight: 600 }}>{lot.lot_code}</span>
-          )}
-          {!showLotCode && (
-            <span style={{ fontStyle: 'italic' }}>{lot.lot_code}</span>
-          )}
+        {/* Variety col → supplier's lot number (always visible) */}
+        <td style={{ paddingLeft: 40, fontSize: 12, color: '#5a5550' }}>
+          {lot.supplier_lot
+            ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{lot.supplier_lot}</span>
+            : <span style={{ color: '#ccc' }}>—</span>}
         </td>
+        {/* Packet ID col → our generated code (optional) */}
+        {showLotCode && (
+          <td style={{ fontSize: 11, fontFamily: 'monospace', color: '#5a7a5a', fontWeight: 600 }}>{lot.lot_code}</td>
+        )}
+        {/* Year */}
         <td style={{ fontSize: 12, color: '#5a6a8a' }}>{lot.packed_for_year || '—'}</td>
+        {/* Packets count col → reuse for supplier */}
         <td style={{ fontSize: 12, color: '#8a8580' }}>{lot.supplier || '—'}</td>
-        <td style={{ fontSize: 12, color: '#8a8580' }}>{lot.supplier_lot || '—'}</td>
+        {/* Species col → empty */}
+        <td></td>
+        {/* Days col → empty */}
+        <td></td>
+        {/* Germ% */}
         <td style={{ fontSize: 12 }}>{lot.germ_rate != null ? `${lot.germ_rate}%` : '—'}</td>
-        <td colSpan={2} style={{ fontSize: 12, color: '#8a8580' }}>{lot.notes || ''}</td>
+        {/* Method col → notes */}
+        <td style={{ fontSize: 12, color: '#8a8580' }}>{lot.notes || ''}</td>
+        {/* Actions */}
         <td>
           <div style={{ display: 'flex', gap: 4 }}>
             <button className="btn btn-secondary btn-sm" style={{ fontSize: 10, padding: '2px 6px' }}
@@ -158,7 +168,7 @@ export default function Seeds({
           </div>
         </td>
         {showLotCode && (
-          <td style={{ fontSize: 11, color: '#8a8580', fontFamily: 'monospace' }}>
+          <td style={{ fontSize: 11, color: '#5a7a5a', fontFamily: 'monospace' }}>
             {seedLots.length > 0 ? seedLots.map(l => l.lot_code).join(', ') : ''}
           </td>
         )}
