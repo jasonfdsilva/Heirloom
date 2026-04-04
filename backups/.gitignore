@@ -1,0 +1,4 @@
+# Ignore binary database dumps — only schema SQL files are tracked
+*.db
+*.db-shm
+*.db-wal
