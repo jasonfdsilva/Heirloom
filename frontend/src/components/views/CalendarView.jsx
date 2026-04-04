@@ -49,7 +49,28 @@ export default function CalendarView({ plantings, onPlantingClick }) {
           </div>
 
           <div style={{ position: 'relative' }}>
-            {plantings.map(p => {
+            {(() => {
+              // Detect varieties that have plantings with more than one distinct method —
+              // those rows need a method badge so the two rows are distinguishable.
+              const methodsBySeedName = {};
+              plantings.forEach(p => {
+                const m = p.method || 'indoors';
+                if (!methodsBySeedName[p.seed_name]) methodsBySeedName[p.seed_name] = new Set();
+                methodsBySeedName[p.seed_name].add(m);
+              });
+              const multiMethodNames = new Set(
+                Object.entries(methodsBySeedName)
+                  .filter(([, methods]) => methods.size > 1)
+                  .map(([name]) => name)
+              );
+
+              const methodBadgeStyle = {
+                indoors: { background: '#8b5cf620', color: '#7c3aed' },
+                direct:  { background: '#16a34a20', color: '#15803d' },
+                nursery: { background: '#0891b220', color: '#0e7490' },
+              };
+
+              return plantings.map(p => {
               const bars = [];
               const method = p.method || 'indoors';
               const harvestEnd = p.first_harvest_date || '2026-09-30';
@@ -116,11 +137,20 @@ export default function CalendarView({ plantings, onPlantingClick }) {
                 }
               }
 
+              const showBadge = multiMethodNames.has(p.seed_name);
+              const badgeStyle = methodBadgeStyle[method] || methodBadgeStyle.indoors;
+
               return (
                 <div key={p.id} className="cal-row" onClick={() => onPlantingClick(p)} style={{ cursor: 'pointer' }}>
-                  <div className="cal-label">
-                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: catColor(p.category), marginRight: 6 }}></span>
-                    {p.seed_name}
+                  <div className="cal-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: catColor(p.category), flexShrink: 0 }}></span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.seed_name}</span>
+                    {showBadge && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4,
+                        flexShrink: 0, ...badgeStyle,
+                      }}>{method}</span>
+                    )}
                   </div>
                   <div className="cal-track" style={{ background: '#faf8f5', borderRadius: 4, border: '1px solid #f0ece6' }}>
                     {MONTHS.slice(startMonth, endMonth + 1).map(m => (
@@ -139,7 +169,8 @@ export default function CalendarView({ plantings, onPlantingClick }) {
                   </div>
                 </div>
               );
-            })}
+            });
+            })()}
           </div>
 
           {plantings.length === 0 && (

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export PATH="/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/opt/node@20/bin:$PATH"
 # test-e2e.sh — Run Playwright E2E tests against a clean isolated container.
 #
 # Mirrors CI exactly: fresh empty database, port 8087, torn down after.
