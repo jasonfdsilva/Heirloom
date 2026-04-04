@@ -8,6 +8,8 @@ services:
     volumes:
       - heirloom-data:/app/data
       - heirloom-photos:/app/photos
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=sqlite:////app/data/heirloom.db
       - PHOTOS_DIR=/app/photos

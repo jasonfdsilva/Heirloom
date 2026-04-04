@@ -8,7 +8,7 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi uvicorn sqlalchemy aiosqlite python-multipart aiofiles
+RUN pip install --no-cache-dir fastapi uvicorn sqlalchemy aiosqlite python-multipart aiofiles anthropic
 
 COPY backend/ /app/backend/
 COPY --from=frontend-build /build/dist /app/static

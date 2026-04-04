@@ -19,7 +19,7 @@ export default function Seeds({
   );
   const [expandedSeeds, setExpandedSeeds] = useState(new Set());
 
-  const COL_COUNT = showLotCode ? 9 : 8;
+  const COL_COUNT = showLotCode ? 10 : 9;
 
   const categories = [...new Set(seeds.map(s => s.category))].sort();
   const allCategories = [...new Set([...categories, 'Flowers', 'Fruit', 'Other'])];
@@ -38,6 +38,9 @@ export default function Seeds({
   };
 
   const handleEditSeed = (seed) => {
+    // For seeds that use the new lot system, the legacy germ_rate/lot/supplier fields
+    // on the seed record may be blank. Fall back to the most recent lot's data.
+    const recentLot = (lotsBySeed[seed.id] || [])[0];
     setEditData({
       _editingSeed: true,
       _seedId: seed.id,
@@ -46,13 +49,13 @@ export default function Seeds({
       _seedSpecies: seed.species || '',
       _seedDays: seed.days_to_maturity || '',
       _seedOrganic: !!seed.organic,
-      _seedSupplier: seed.supplier || '',
+      _seedSupplier: seed.supplier || recentLot?.supplier || '',
       _seedStartIndoors: !!seed.start_indoors,
       _seedDirectSow: !!seed.direct_sow,
       _seedIndoorWeeks: seed.suggested_indoor_weeks || 0,
-      _seedGermRate: seed.germ_rate || '',
-      _seedLot: seed.lot || '',
-      _seedSku: seed.sku || '',
+      _seedGermRate: seed.germ_rate != null ? String(seed.germ_rate) : (recentLot?.germ_rate != null ? String(recentLot.germ_rate) : ''),
+      _seedLot: seed.lot || recentLot?.supplier_lot || '',
+      _seedSku: seed.sku || recentLot?.sku || '',
       _seedSpacing: seed.spacing_inches || 12,
       _seedImageUrl: seed.image_url || '',
       _seedShortLabel: seed.short_label || '',
@@ -103,20 +106,24 @@ export default function Seeds({
   const renderLotSubRows = (seedId, color) => {
     const seedLots = lotsBySeed[seedId] || [];
     if (!seedLots.length) return null;
+    const parentSeed = seeds.find(s => s.id === seedId);
     return seedLots.map(lot => (
-      <tr key={`lot-${lot.id}`} style={{ background: color + '08' }}>
-        {/* Variety col → supplier's lot number (always visible) */}
-        <td style={{ paddingLeft: 40, fontSize: 12, color: '#5a5550' }}>
-          {lot.supplier_lot
-            ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{lot.supplier_lot}</span>
-            : <span style={{ color: '#ccc' }}>—</span>}
-        </td>
+      <tr key={`lot-${lot.id}`} style={{ background: color + '08' }}
+        title={lot.notes || undefined}>
+        {/* Variety col → indent only */}
+        <td style={{ paddingLeft: 40 }}></td>
+        {/* Year */}
+        <td style={{ fontSize: 12, color: '#5a6a8a' }}>{lot.packed_for_year || '—'}</td>
         {/* Packet ID col → our generated code (optional) */}
         {showLotCode && (
           <td style={{ fontSize: 11, fontFamily: 'monospace', color: '#5a7a5a', fontWeight: 600 }}>{lot.lot_code}</td>
         )}
-        {/* Year */}
-        <td style={{ fontSize: 12, color: '#5a6a8a' }}>{lot.packed_for_year || '—'}</td>
+        {/* Lot # col → this lot's supplier_lot */}
+        <td style={{ fontSize: 12, color: '#5a5550' }}>
+          {lot.supplier_lot
+            ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{lot.supplier_lot}</span>
+            : <span style={{ color: '#ccc' }}>—</span>}
+        </td>
         {/* Packets count col → reuse for supplier */}
         <td style={{ fontSize: 12, color: '#8a8580' }}>{lot.supplier || '—'}</td>
         {/* Species col → empty */}
@@ -125,8 +132,12 @@ export default function Seeds({
         <td></td>
         {/* Germ% */}
         <td style={{ fontSize: 12 }}>{lot.germ_rate != null ? `${lot.germ_rate}%` : '—'}</td>
-        {/* Method col → notes */}
-        <td style={{ fontSize: 12, color: '#8a8580' }}>{lot.notes || ''}</td>
+        {/* Method col → from parent variety */}
+        <td style={{ fontSize: 12 }}>
+          {parentSeed?.start_indoors ? '🏠 Indoor' : ''}
+          {parentSeed?.start_indoors && parentSeed?.direct_sow ? ' / ' : ''}
+          {parentSeed?.direct_sow ? '🌿 Direct' : ''}
+        </td>
         {/* Actions */}
         <td>
           <div style={{ display: 'flex', gap: 4 }}>
@@ -146,6 +157,10 @@ export default function Seeds({
     const seedLots = lotsBySeed[s.id] || [];
     const isExpanded = expandedSeeds.has(s.id);
     const yearStr = yearsForSeed(s.id);
+    // Fall back to the most recent lot's germ_rate if the variety has none set
+    const displayGermRate = s.germ_rate != null
+      ? s.germ_rate
+      : (seedLots.find(l => l.germ_rate != null)?.germ_rate ?? null);
 
     return [
       <tr key={s.id}>
@@ -167,12 +182,19 @@ export default function Seeds({
             {s.organic ? <span className="badge badge-organic" style={{ marginLeft: 2 }}>OG</span> : null}
           </div>
         </td>
+        {/* Year */}
+        <td style={{ fontSize: 12, color: '#5a6a8a' }}>{yearStr || '—'}</td>
         {showLotCode && (
           <td style={{ fontSize: 11, color: '#5a7a5a', fontFamily: 'monospace' }}>
             {seedLots.length > 0 ? seedLots.map(l => l.lot_code).join(', ') : ''}
           </td>
         )}
-        <td style={{ fontSize: 12, color: '#5a6a8a' }}>{yearStr || '—'}</td>
+        {/* Lot # col → supplier lot numbers, always visible */}
+        <td style={{ fontSize: 12, color: '#5a5550' }}>
+          {seedLots.length > 0
+            ? seedLots.map(l => l.supplier_lot).filter(Boolean).join(', ') || <span style={{ color: '#ccc' }}>—</span>
+            : <span style={{ color: '#ccc' }}>—</span>}
+        </td>
         <td>
           {seedLots.length > 0 ? (
             <span style={{ background: color + '22', color, fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 10 }}>
@@ -182,7 +204,7 @@ export default function Seeds({
         </td>
         <td style={{ fontStyle: 'italic', fontSize: 12, color: '#8a8580' }}>{s.species}</td>
         <td>{s.days_to_maturity}</td>
-        <td>{s.germ_rate ? `${s.germ_rate}%` : ''}</td>
+        <td style={{ fontSize: 12 }}>{displayGermRate != null ? `${displayGermRate}%` : ''}</td>
         <td style={{ fontSize: 12 }}>
           {s.start_indoors ? '🏠 Indoor' : ''}{s.start_indoors && s.direct_sow ? ' / ' : ''}{s.direct_sow ? '🌿 Direct' : ''}
         </td>
@@ -311,8 +333,9 @@ export default function Seeds({
           <thead>
             <tr>
               <th>Variety</th>
-              {showLotCode && <th style={{ fontSize: 11 }}>Packet ID</th>}
               <th style={{ fontSize: 11 }}>Year</th>
+              {showLotCode && <th style={{ fontSize: 11 }}>Packet ID</th>}
+              <th style={{ fontSize: 11 }}>Lot #</th>
               <th style={{ fontSize: 11 }}>Packets</th>
               <th>Species</th>
               <th>Days</th>

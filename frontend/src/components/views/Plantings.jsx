@@ -26,6 +26,16 @@ export default function Plantings({
     }, {})
   ).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 
+  const [expandedVarietyGroups, setExpandedVarietyGroups] = React.useState(new Set());
+
+  const toggleVarietyGroup = (key) => {
+    setExpandedVarietyGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
   const togglePlanting = (id) => {
     setSelectedPlantingIds(prev => {
       const next = new Set(prev);
@@ -204,7 +214,8 @@ export default function Plantings({
 
                     if (!bulkSelectMode && isCatCollapsed) return [categoryRow];
 
-                    const plantingRows = catPlantings.map(p => {
+                    // Helper to render a single planting row (used for both flat and sub-row)
+                    const renderPlantingRow = (p, isSubRow = false) => {
                       const seed = seeds.find(sd => sd.id === p.seed_id);
                       const isExpanded = expandedPlantingIds.has(p.id);
                       const members = plantingMembersMap[p.id] || [];
@@ -213,56 +224,58 @@ export default function Plantings({
                         .filter(Boolean);
                       const isProjected = p.transplant_date && new Date(p.transplant_date + 'T00:00:00') > new Date();
                       const isSelected = selectedPlantingIds.has(p.id);
+                      const paddingLeft = isSubRow ? 32 : 8;
 
                       return (
                         <React.Fragment key={p.id}>
                           <tr
                             style={{
                               cursor: 'pointer',
-                              background: isSelected ? '#f0ece6' : isExpanded ? '#faf8f5' : undefined,
+                              background: isSelected ? '#f0ece6' : isSubRow ? color + '06' : isExpanded ? '#faf8f5' : undefined,
                               outline: isSelected ? '2px solid #8a6a4a' : undefined,
                               outlineOffset: -2,
                             }}
                             onClick={() => bulkSelectMode ? togglePlanting(p.id) : openPlantingDetail(p)}>
                             {bulkSelectMode && (
                               <td style={{ paddingLeft: 16, width: 40 }} onClick={e => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => togglePlanting(p.id)}
-                                  style={{ cursor: 'pointer', width: 16, height: 16 }}
-                                />
+                                <input type="checkbox" checked={isSelected} onChange={() => togglePlanting(p.id)}
+                                  style={{ cursor: 'pointer', width: 16, height: 16 }} />
                               </td>
                             )}
-                            <td style={{ paddingLeft: 8 }}>
+                            <td style={{ paddingLeft }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 {!bulkSelectMode && (
                                   <button
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 11, color: '#8a8580', flexShrink: 0, lineHeight: 1 }}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 11, color: members.length > 0 ? '#8a8580' : 'transparent', flexShrink: 0, lineHeight: 1 }}
                                     onClick={e => {
                                       e.stopPropagation();
+                                      if (members.length === 0) return;
                                       setExpandedPlantingIds(prev => {
                                         const next = new Set(prev);
                                         if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
                                         return next;
                                       });
                                     }}
-                                    title={isExpanded ? 'Collapse' : `Expand (${members.length} plants)`}>
-                                    {isExpanded ? '▼' : '▶'}
+                                    title={members.length > 0 ? (isExpanded ? 'Collapse' : `Expand (${members.length} plants)`) : undefined}>
+                                    {members.length > 0 ? (isExpanded ? '▼' : '▶') : ' '}
                                   </button>
                                 )}
-                                {seed?.image_url ? (
+                                {!isSubRow && (seed?.image_url ? (
                                   <img src={seed.image_url} alt={p.seed_name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
                                 ) : (
                                   <div style={{ width: 28, height: 28, borderRadius: 4, background: catColor(p.category), opacity: 0.35, flexShrink: 0 }} />
-                                )}
+                                ))}
                                 <div>
-                                  <div style={{ fontWeight: 500, fontSize: 13 }}>{p.seed_name}</div>
+                                  <div style={{ fontWeight: isSubRow ? 400 : 500, fontSize: 13 }}>
+                                    {isSubRow
+                                      ? <span style={{ fontFamily: 'monospace', color: '#8a6a4a' }}>#{p.id}</span>
+                                      : p.seed_name}
+                                  </div>
                                   {members.length > 0 && (
                                     <div style={{ fontSize: 11, color: '#8a8580' }}>{members.length} individual plants</div>
                                   )}
                                 </div>
-                                {p.organic ? <span className="badge badge-organic" style={{ marginLeft: 4 }}>OG</span> : null}
+                                {!isSubRow && p.organic ? <span className="badge badge-organic" style={{ marginLeft: 4 }}>OG</span> : null}
                               </div>
                             </td>
                             <td>
@@ -347,7 +360,72 @@ export default function Plantings({
                           })}
                         </React.Fragment>
                       );
+                    };
+
+                    // Group plantings by seed_id, sorted alphabetically by seed name
+                    const bySeed = {};
+                    catPlantings.forEach(p => {
+                      if (!bySeed[p.seed_id]) bySeed[p.seed_id] = [];
+                      bySeed[p.seed_id].push(p);
                     });
+                    const seedGroups = Object.entries(bySeed)
+                      .sort(([, a], [, b]) => a[0].seed_name.localeCompare(b[0].seed_name));
+
+                    const plantingRows = seedGroups.flatMap(([seedId, groupPlantings]) => {
+                      // Single planting → flat row, same as before
+                      if (groupPlantings.length === 1 || bulkSelectMode) {
+                        return groupPlantings.map(p => renderPlantingRow(p, false));
+                      }
+
+                      // Multiple plantings of same variety → group header + expandable sub-rows
+                      const groupKey = `${cat}-${seedId}`;
+                      const isGroupExpanded = expandedVarietyGroups.has(groupKey);
+                      const seed = seeds.find(s => s.id === seedId);
+                      const totalStarted = groupPlantings.reduce((s, p) => s + (p.qty_started || 0), 0);
+                      const totalPlanted = groupPlantings.reduce((s, p) => s + (p.qty_planted || 0), 0);
+                      const statuses = [...new Set(groupPlantings.map(p => p.status))];
+                      const commonStatus = statuses.length === 1 ? statuses[0] : null;
+
+                      const groupHeaderRow = (
+                        <tr key={`group-${groupKey}`}
+                          style={{ background: color + '10', cursor: 'pointer' }}
+                          onClick={() => toggleVarietyGroup(groupKey)}>
+                          <td style={{ paddingLeft: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 11, color, flexShrink: 0, lineHeight: 1 }}>
+                                {isGroupExpanded ? '▼' : '▶'}
+                              </button>
+                              {seed?.image_url ? (
+                                <img src={seed.image_url} alt={groupPlantings[0].seed_name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
+                              ) : (
+                                <div style={{ width: 28, height: 28, borderRadius: 4, background: color, opacity: 0.35, flexShrink: 0 }} />
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: 13 }}>{groupPlantings[0].seed_name}</div>
+                                <div style={{ fontSize: 11, color }}>
+                                  {groupPlantings.length} plantings
+                                </div>
+                              </div>
+                              {groupPlantings[0].organic ? <span className="badge badge-organic" style={{ marginLeft: 4 }}>OG</span> : null}
+                            </div>
+                          </td>
+                          <td><span style={{ color: '#ccc', fontSize: 13 }}>—</span></td>
+                          <td style={{ fontSize: 13, fontWeight: 600 }}>{totalStarted || '—'}</td>
+                          <td style={{ fontSize: 13, fontWeight: 600 }}>{totalPlanted || '—'}</td>
+                          <td>
+                            {commonStatus
+                              ? <><span className="status-dot" style={{ background: statusColor(commonStatus) }}></span><span style={{ fontSize: 13 }}>{STATUS_LABELS[commonStatus] || commonStatus}</span></>
+                              : <span style={{ fontSize: 13, color: '#8a8580' }}>Mixed</span>}
+                          </td>
+                          <td colSpan={3}></td>
+                          <td></td>
+                        </tr>
+                      );
+
+                      const subRows = isGroupExpanded ? groupPlantings.map(p => renderPlantingRow(p, true)) : [];
+                      return [groupHeaderRow, ...subRows];
+                    });
+
                     return [categoryRow, ...plantingRows];
                   });
                 })()}

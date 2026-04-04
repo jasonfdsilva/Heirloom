@@ -7,6 +7,8 @@ import AddLotModal from '../../components/modals/AddLotModal';
 vi.mock('../../lib/api', () => ({
   default: {
     get: vi.fn().mockResolvedValue({ lot_code: 'BL-2026-001' }),
+    post: vi.fn().mockResolvedValue({ id: 'new-seed-id', name: 'New Variety', category: 'Tomatoes' }),
+    put: vi.fn().mockResolvedValue({}),
     upload: vi.fn(),
   },
 }));
@@ -14,9 +16,9 @@ vi.mock('../../lib/api', () => ({
 import api from '../../lib/api';
 
 const SEEDS = [
-  { id: 'test-lettuce', name: 'Buttercrunch Lettuce', category: 'Greens' },
-  { id: 'test-tomato', name: 'Sun Gold', category: 'Tomatoes' },
-  { id: 'test-pepper', name: 'Shishito', category: 'Peppers' },
+  { id: 'test-lettuce', name: 'Buttercrunch Lettuce', category: 'Greens', species: 'Lactuca sativa' },
+  { id: 'test-tomato', name: 'Sun Gold', category: 'Tomatoes', species: 'Solanum lycopersicum' },
+  { id: 'test-pepper', name: 'Shishito', category: 'Peppers', species: 'Capsicum annuum' },
 ];
 
 const defaultProps = {
@@ -31,6 +33,8 @@ describe('AddLotModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.get.mockResolvedValue({ lot_code: 'SG-2026-001' });
+    api.post.mockResolvedValue({ id: 'new-seed-id', name: 'New Variety', category: '' });
+    api.put.mockResolvedValue({});
   });
 
   it('renders Manual and Scan Packet tabs for new lots', () => {
@@ -47,8 +51,10 @@ describe('AddLotModal', () => {
   it('renders all Manual tab fields', () => {
     render(<AddLotModal {...defaultProps} />);
     expect(screen.getByText('Seed Variety')).toBeInTheDocument();
+    expect(screen.getByText('Category')).toBeInTheDocument();
+    expect(screen.getByText('Species')).toBeInTheDocument();
+    expect(screen.getByText('Sowing Method')).toBeInTheDocument();
     expect(screen.getByText('Packed For Year')).toBeInTheDocument();
-    expect(screen.getByText('Lot Code')).toBeInTheDocument();
     expect(screen.getByText('Purchased Year')).toBeInTheDocument();
     expect(screen.getByText('Supplier')).toBeInTheDocument();
     expect(screen.getByText('Supplier Lot #')).toBeInTheDocument();
@@ -71,18 +77,19 @@ describe('AddLotModal', () => {
     expect(screen.getByText('Upload Packet Image')).toBeInTheDocument();
   });
 
-  it('pre-selects seed when initialSeedId is provided', async () => {
+  it('pre-selects seed when initialSeedId is provided', () => {
     render(<AddLotModal {...defaultProps} initialSeedId="test-pepper" />);
-    const select = screen.getByRole('combobox');
-    expect(select.value).toBe('test-pepper');
+    // Variety select is the first combobox; it should have test-pepper pre-selected
+    const selects = screen.getAllByRole('combobox');
+    expect(selects[0].value).toBe('test-pepper');
   });
 
   it('calls onSubmit when Add Packet button clicked with required fields', async () => {
     const onSubmit = vi.fn();
     render(<AddLotModal {...defaultProps} initialSeedId="test-tomato" onSubmit={onSubmit} />);
-    // Wait for lot code auto-fetch to complete
-    await waitFor(() => expect(api.get).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole('button', { name: 'Add Packet' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Packet' }));
+    });
     expect(onSubmit).toHaveBeenCalledTimes(1);
     const [payload] = onSubmit.mock.calls[0];
     expect(payload.seed_id).toBe('test-tomato');
@@ -102,18 +109,24 @@ describe('AddLotModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('lot code field is editable', async () => {
+  it('variety search input filters the seed dropdown', () => {
     render(<AddLotModal {...defaultProps} />);
-    const lotInput = screen.getByPlaceholderText('e.g. SH-2026-001');
-    fireEvent.change(lotInput, { target: { value: 'CUSTOM-123' } });
-    expect(lotInput.value).toBe('CUSTOM-123');
+    const searchInput = screen.getByPlaceholderText('Type variety name…');
+    fireEvent.change(searchInput, { target: { value: 'Sun' } });
+    expect(searchInput.value).toBe('Sun');
+    // After typing "Sun", only Sun Gold should appear in the select
+    const selects = screen.getAllByRole('combobox');
+    const options = Array.from(selects[0].options).map(o => o.text);
+    expect(options.some(o => o.includes('Sun Gold'))).toBe(true);
+    expect(options.some(o => o.includes('Shishito'))).toBe(false);
   });
 
   it('seed dropdown onChange updates state', () => {
     render(<AddLotModal {...defaultProps} />);
-    const select = screen.getByRole('combobox');
-    fireEvent.change(select, { target: { value: 'test-lettuce' } });
-    expect(select.value).toBe('test-lettuce');
+    const selects = screen.getAllByRole('combobox');
+    const varietySelect = selects[0];
+    fireEvent.change(varietySelect, { target: { value: 'test-lettuce' } });
+    expect(varietySelect.value).toBe('test-lettuce');
   });
 
   it('year field onChange updates state', () => {
@@ -164,17 +177,6 @@ describe('AddLotModal', () => {
     const editLot = { id: 1, seed_id: 'test-pepper', lot_code: 'SH-2026-001', packed_for_year: 2026 };
     render(<AddLotModal {...defaultProps} editLot={editLot} />);
     expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument();
-  });
-
-  it('auto-fetches lot code when seed and year change', async () => {
-    render(<AddLotModal {...defaultProps} />);
-    const select = screen.getByRole('combobox');
-    await act(async () => {
-      fireEvent.change(select, { target: { value: 'test-pepper' } });
-    });
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith(
-      expect.stringContaining('/api/seed-lots/generate-code')
-    ));
   });
 
   it('shows scan error when API returns detail field', async () => {
@@ -235,4 +237,121 @@ describe('AddLotModal', () => {
       expect(screen.getByDisplayValue('Seed Savers')).toBeInTheDocument();
     });
   });
+
+  it('shows new variety hint when typed name has no match', () => {
+    render(<AddLotModal {...defaultProps} />);
+    const searchInput = screen.getByPlaceholderText('Type variety name…');
+    fireEvent.change(searchInput, { target: { value: 'Totally New Tomato' } });
+    expect(screen.getByText(/"Totally New Tomato" will be created as a new variety when you save/)).toBeInTheDocument();
+  });
+
+  it('Add Packet button is disabled when no seed selected and no variety typed', () => {
+    render(<AddLotModal {...defaultProps} />);
+    const addBtn = screen.getByRole('button', { name: 'Add Packet' });
+    expect(addBtn).toBeDisabled();
+  });
+
+  it('sowing method checkboxes toggle correctly', () => {
+    render(<AddLotModal {...defaultProps} />);
+    const checkboxes = screen.getAllByRole('checkbox');
+    const startIndoors = checkboxes[0];
+    const directSow = checkboxes[1];
+    expect(startIndoors.checked).toBe(false);
+    expect(directSow.checked).toBe(false);
+    fireEvent.click(startIndoors);
+    expect(startIndoors.checked).toBe(true);
+    fireEvent.click(directSow);
+    expect(directSow.checked).toBe(true);
+  });
+
+  it('category search input and select onChange update category state', () => {
+    render(<AddLotModal {...defaultProps} />);
+    // Category text input (line 307)
+    const categorySearch = screen.getByPlaceholderText('Type to filter or enter new category…');
+    fireEvent.change(categorySearch, { target: { value: 'Tom' } });
+    expect(categorySearch.value).toBe('Tom');
+    // Category select is the second combobox (line 311)
+    const selects = screen.getAllByRole('combobox');
+    const categorySelect = selects[1];
+    fireEvent.change(categorySelect, { target: { value: 'Tomatoes' } });
+    expect(categorySelect.value).toBe('Tomatoes');
+  });
+
+  it('species search input and select onChange update species state', () => {
+    render(<AddLotModal {...defaultProps} />);
+    const speciesSearch = screen.getByPlaceholderText('Type to filter or enter new species…');
+    fireEvent.change(speciesSearch, { target: { value: 'Solanum' } });
+    expect(speciesSearch.value).toBe('Solanum');
+    // Species select is the third combobox
+    const selects = screen.getAllByRole('combobox');
+    const speciesSelect = selects[2];
+    fireEvent.change(speciesSelect, { target: { value: 'Solanum lycopersicum' } });
+    expect(speciesSelect.value).toBe('Solanum lycopersicum');
+  });
+
+  it('purchased year field accepts input', () => {
+    render(<AddLotModal {...defaultProps} />);
+    const yearInputs = screen.getAllByRole('spinbutton');
+    // Index 0 is packed_for_year, index 1 is purchased_year
+    const purchasedYearInput = yearInputs[1];
+    fireEvent.change(purchasedYearInput, { target: { value: '2024' } });
+    expect(purchasedYearInput.value).toBe('2024');
+  });
+
+  it('calls onSeedCreated when a new variety is created on submit', async () => {
+    const onSubmit = vi.fn();
+    const onSeedCreated = vi.fn();
+    api.post.mockResolvedValueOnce({ id: 'brand-new-id', name: 'Brand New Tomato', category: 'Tomatoes' });
+    render(<AddLotModal {...defaultProps} onSubmit={onSubmit} onSeedCreated={onSeedCreated} />);
+    // Type a name that doesn't match any seed
+    const searchInput = screen.getByPlaceholderText('Type variety name…');
+    fireEvent.change(searchInput, { target: { value: 'Brand New Tomato' } });
+    // Fill packed_for_year (it already has current year, but ensure canSubmit)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Packet' }));
+    });
+    await waitFor(() => expect(onSeedCreated).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows submit error when api.post returns no id for new variety', async () => {
+    api.post.mockResolvedValueOnce(null);
+    render(<AddLotModal {...defaultProps} />);
+    const searchInput = screen.getByPlaceholderText('Type variety name…');
+    fireEvent.change(searchInput, { target: { value: 'Mystery Variety' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Packet' }));
+    });
+    await waitFor(() =>
+      expect(screen.getByText('Could not create variety. Please try again.')).toBeInTheDocument()
+    );
+  });
+
+  it('calls api.put when submitting with a changed category for an existing seed', async () => {
+    const onSubmit = vi.fn();
+    render(<AddLotModal {...defaultProps} initialSeedId="test-tomato" onSubmit={onSubmit} />);
+    // Change category to something different from the seed's category ('Tomatoes')
+    const categorySearch = screen.getByPlaceholderText('Type to filter or enter new category…');
+    fireEvent.change(categorySearch, { target: { value: 'Vegetables' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Packet' }));
+    });
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('sorts seeds with same category by name', () => {
+    const SAME_CAT_SEEDS = [
+      { id: 'zz-tomato', name: 'Zucchini Giant', category: 'Tomatoes', species: null },
+      { id: 'aa-tomato', name: 'Amish Paste', category: 'Tomatoes', species: null },
+    ];
+    render(<AddLotModal {...defaultProps} seeds={SAME_CAT_SEEDS} />);
+    const selects = screen.getAllByRole('combobox');
+    const varietySelect = selects[0];
+    const options = Array.from(varietySelect.options).filter(o => o.value !== '');
+    // Amish Paste should come before Zucchini Giant alphabetically
+    expect(options[0].text).toContain('Amish Paste');
+    expect(options[1].text).toContain('Zucchini Giant');
+  });
 });
+

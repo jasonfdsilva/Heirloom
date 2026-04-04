@@ -168,17 +168,39 @@ export default function BedPlanner({
             {(() => {
               const inThisBed = plantings.filter(p => (p.grid_structures || []).includes(bed.id));
               const notInThisBed = plantings.filter(p => !(p.grid_structures || []).includes(bed.id));
-              // Unassigned = has plants not yet placed anywhere (unplaced_count > 0)
               const unassigned = notInThisBed.filter(p => (p.unplaced_count || 0) > 0);
-              // Other beds = not here, fully placed elsewhere
               const otherBeds = notInThisBed.filter(p => (p.unplaced_count || 0) === 0 && (p.grid_structures || []).length > 0);
-              const grouped = { unassigned, otherBeds };
 
-              const renderPaintable = (p) => {
+              // Group a list of plantings by category, sorted alpha within each category
+              const groupByCategory = (list) => {
+                const byCategory = {};
+                list.forEach(p => {
+                  const cat = p.category || 'Other';
+                  if (!byCategory[cat]) byCategory[cat] = [];
+                  byCategory[cat].push(p);
+                });
+                Object.values(byCategory).forEach(arr =>
+                  arr.sort((a, b) => a.seed_name.localeCompare(b.seed_name))
+                );
+                return Object.entries(byCategory).sort(([a], [b]) => a.localeCompare(b));
+              };
+
+              // Detect if there are multiple plantings of the same seed in the same list
+              const seedCounts = (list) => {
+                const counts = {};
+                list.forEach(p => { counts[p.seed_id] = (counts[p.seed_id] || 0) + 1; });
+                return counts;
+              };
+
+              const renderPaintable = (p, showId = false) => {
                 const isActive = activePaintPlanting?.id === p.id;
                 const count = cellCounts[p.id] || 0;
                 const seed = seeds.find(s => s.id === p.seed_id);
                 const imageUrl = seed?.image_url;
+                // Format start date short: "Mar 30"
+                const startLabel = p.indoor_start_date
+                  ? new Date(p.indoor_start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  : null;
                 return (
                   <div key={p.id}
                     style={{
@@ -199,11 +221,16 @@ export default function BedPlanner({
                         </div>
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.seed_name}</div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
+                          <span style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.seed_name}</span>
+                          {showId && <span style={{ fontSize: 10, color: '#a8a399', fontFamily: 'monospace', flexShrink: 0 }}>#{p.id}</span>}
+                        </div>
                         <div style={{ fontSize: 11, color: '#8a8580', marginTop: 1 }}>
                           {seed?.spacing_inches || 12}" spacing
-                          {count > 0 && <span style={{ marginLeft: 6 }}>{count} cells</span>}
-                          {p.unplaced_count > 0 && <span style={{ color: '#e8a020', marginLeft: 6 }}>{p.unplaced_count} unplaced</span>}
+                          {p.qty_started != null && <span style={{ marginLeft: 5 }}>{p.qty_started} started</span>}
+                          {startLabel && <span style={{ marginLeft: 5 }}>{startLabel}</span>}
+                          {count > 0 && <span style={{ marginLeft: 5 }}>{count} cells</span>}
+                          {p.unplaced_count > 0 && <span style={{ color: '#e8a020', marginLeft: 5 }}>{p.unplaced_count} unplaced</span>}
                         </div>
                       </div>
                     </div>
@@ -214,26 +241,31 @@ export default function BedPlanner({
                 );
               };
 
+              const renderSection = (label, list, labelColor = '#8a8580') => {
+                if (!list.length) return null;
+                const counts = seedCounts(list);
+                const groups = groupByCategory(list);
+                return (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: labelColor, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '8px 0 4px' }}>{label}</div>
+                    {groups.map(([cat, catPlantings]) => (
+                      <div key={cat}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 0 3px' }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: catColor(cat), display: 'inline-block', flexShrink: 0 }} />
+                          <span style={{ fontSize: 10, color: catColor(cat), fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cat}</span>
+                        </div>
+                        {catPlantings.map(p => renderPaintable(p, counts[p.seed_id] > 1))}
+                      </div>
+                    ))}
+                  </div>
+                );
+              };
+
               return (
                 <>
-                  {inThisBed.length > 0 && (
-                    <>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#8a8580', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '4px 0 6px' }}>In {bed.name}</div>
-                      {inThisBed.map(renderPaintable)}
-                    </>
-                  )}
-                  {grouped.unassigned.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#e8a020', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '8px 0 6px' }}>Unassigned</div>
-                      {grouped.unassigned.map(renderPaintable)}
-                    </div>
-                  )}
-                  {grouped.otherBeds.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#8a8580', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '8px 0 6px' }}>Other Beds</div>
-                      {grouped.otherBeds.map(renderPaintable)}
-                    </div>
-                  )}
+                  {renderSection(`In ${bed.name}`, inThisBed)}
+                  {renderSection('Unassigned', unassigned, '#e8a020')}
+                  {renderSection('Other Beds', otherBeds)}
                 </>
               );
             })()}

@@ -35,7 +35,7 @@ def generate_lot_code(db: sqlite3.Connection, seed_id: str, packed_for_year: int
 
 def list_lots(db: sqlite3.Connection) -> list:
     rows = db.execute("""
-        SELECT sl.*, s.name AS seed_name, s.category
+        SELECT sl.*, s.name AS seed_name, s.category, s.species
         FROM seed_lots sl
         JOIN seeds s ON sl.seed_id = s.id
         ORDER BY sl.packed_for_year DESC, sl.lot_code
@@ -71,7 +71,7 @@ def create_lot(db: sqlite3.Connection, data: SeedLotCreate) -> dict:
     )
     db.commit()
     row = db.execute(
-        "SELECT sl.*, s.name AS seed_name, s.category FROM seed_lots sl JOIN seeds s ON sl.seed_id = s.id WHERE sl.lot_code = ?",
+        "SELECT sl.*, s.name AS seed_name, s.category, s.species FROM seed_lots sl JOIN seeds s ON sl.seed_id = s.id WHERE sl.lot_code = ?",
         (lot_code,),
     ).fetchone()
     return dict(row)
@@ -87,7 +87,7 @@ def update_lot(db: sqlite3.Connection, lot_id: int, data: SeedLotUpdate) -> dict
     db.execute(f"UPDATE seed_lots SET {set_clause} WHERE id = ?", values)
     db.commit()
     row = db.execute(
-        "SELECT sl.*, s.name AS seed_name, s.category FROM seed_lots sl JOIN seeds s ON sl.seed_id = s.id WHERE sl.id = ?",
+        "SELECT sl.*, s.name AS seed_name, s.category, s.species FROM seed_lots sl JOIN seeds s ON sl.seed_id = s.id WHERE sl.id = ?",
         (lot_id,),
     ).fetchone()
     return dict(row) if row else {}
@@ -113,7 +113,8 @@ def extract_packet_data(image_bytes: bytes, mime_type: str) -> dict:
     client = anthropic.Anthropic()
     prompt = (
         "Extract seed packet information. Return ONLY a JSON object with these keys: "
-        "name, category, supplier, supplier_lot, sku, packed_for_year (integer or null), "
+        "name, category, species (latin botanical name, e.g. 'Raphanus sativus'), "
+        "supplier, supplier_lot, sku, packed_for_year (integer or null), "
         "germ_rate (float 0-100 or null), days_to_maturity (string or null), "
         "organic (boolean or null), notes. Use null for any missing fields."
     )

@@ -502,8 +502,14 @@ export default function App() {
     } else {
       await api.post('/api/seed-lots', payload);
     }
-    const updatedLots = await api.get('/api/seed-lots');
+    // Always refresh both lots and seeds (seeds may have changed category/species,
+    // or a new variety was just created and needs image fetch)
+    const [updatedLots, updatedSeeds] = await Promise.all([
+      api.get('/api/seed-lots'),
+      api.get('/api/seeds'),
+    ]);
     setLots(updatedLots);
+    setSeeds(updatedSeeds);
     setShowModal(null);
     setEditingLot(null);
     setAddLotSeedId(null);
@@ -862,6 +868,13 @@ export default function App() {
             initialSeedId={addLotSeedId}
             editLot={editingLot}
             onSubmit={handleSubmitLot}
+            onSeedCreated={newSeed => {
+              setSeeds(prev => [...prev, newSeed]);
+              // Kick off image fetch in background for the new variety; refresh seeds when done
+              api.post('/api/seeds/fetch-images', {}).then(() =>
+                api.get('/api/seeds').then(setSeeds)
+              ).catch(() => {});
+            }}
             onClose={() => { setShowModal(null); setEditingLot(null); setAddLotSeedId(null); }}
           />
         )}
