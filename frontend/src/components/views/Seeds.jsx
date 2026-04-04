@@ -123,7 +123,7 @@ export default function Seeds({
             <button className="btn btn-secondary btn-sm" style={{ fontSize: 10, padding: '2px 6px' }}
               onClick={() => onEditLot && onEditLot(lot)}>Edit</button>
             <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5' }}
-              onClick={() => { if (window.confirm(`Delete lot ${lot.lot_code}?`)) onDeleteLot && onDeleteLot(lot.id); }}>
+              onClick={() => { if (window.confirm(`Delete packet ${lot.lot_code}?`)) onDeleteLot && onDeleteLot(lot.id); }}>
               ✕
             </button>
           </div>
@@ -284,10 +284,10 @@ export default function Seeds({
             <button className={`btn btn-sm ${groupBy === 'year' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setGroupBy('year')}>By Year</button>
           </div>
-          {/* Show Lot Code toggle */}
+          {/* Show Packet ID toggle */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer', color: '#5a5550' }}>
             <input type="checkbox" checked={showLotCode} onChange={e => toggleLotCode(e.target.checked)} />
-            Show Lot Code
+            Show Packet ID
           </label>
           {/* New Packet button */}
           <button className="btn btn-primary btn-sm" onClick={() => onAddLot && onAddLot(null)}>
@@ -301,7 +301,7 @@ export default function Seeds({
           <thead>
             <tr>
               <th>Variety</th>
-              {showLotCode && <th style={{ fontSize: 11 }}>Lot Code</th>}
+              {showLotCode && <th style={{ fontSize: 11 }}>Packet ID</th>}
               <th style={{ fontSize: 11 }}>Year</th>
               <th style={{ fontSize: 11 }}>Packets</th>
               <th>Species</th>

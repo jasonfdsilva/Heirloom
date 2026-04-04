@@ -159,14 +159,14 @@ export default function AddLotModal({ seeds = [], initialSeedId = null, editLot 
 
             <div className="form-group">
               <label className="form-label">
-                Lot Code
+                Packet ID
                 {lotCodeLoading && <span style={{ fontSize: 11, color: '#8a8580', marginLeft: 6 }}>generating…</span>}
               </label>
               <input type="text" className="form-input" value={formData.lot_code}
                 onChange={e => set('lot_code', e.target.value)}
                 placeholder="e.g. SH-2026-001" />
               <div style={{ fontSize: 11, color: '#8a8580', marginTop: 3 }}>
-                Auto-generated from variety + year. Edit to override.
+                Your unique identifier, auto-generated from variety + year. Edit to override.
               </div>
             </div>
 
