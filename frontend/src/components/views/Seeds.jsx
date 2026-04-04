@@ -126,10 +126,10 @@ export default function Seeds({
         </td>
         {/* Packets count col → reuse for supplier */}
         <td style={{ fontSize: 12, color: '#8a8580' }}>{lot.supplier || '—'}</td>
-        {/* Species col → empty */}
-        <td></td>
-        {/* Days col → empty */}
-        <td></td>
+        {/* Species col → from parent variety */}
+        <td style={{ fontStyle: 'italic', fontSize: 12, color: '#b0a898' }}>{parentSeed?.species || ''}</td>
+        {/* Days col → from parent variety */}
+        <td style={{ fontSize: 12, color: '#b0a898' }}>{parentSeed?.days_to_maturity || ''}</td>
         {/* Germ% */}
         <td style={{ fontSize: 12 }}>{lot.germ_rate != null ? `${lot.germ_rate}%` : '—'}</td>
         {/* Method col → from parent variety */}
