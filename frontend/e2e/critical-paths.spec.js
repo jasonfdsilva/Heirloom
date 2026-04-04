@@ -22,11 +22,18 @@ async function createPlanting(page) {
   await page.locator('.modal-actions button.btn-primary').click();
   await expect(page.locator('.modal-title')).not.toBeVisible();
 
-  // Wait for the list to update and capture the new planting's ID
-  await expect(page.locator('tbody tr')).not.toHaveCount(before, { timeout: 8000 });
-  const afterResp = await page.request.get('/api/plantings');
-  const afterList = await afterResp.json();
-  const newPlanting = afterList.find(p => !beforeIds.has(p.id));
+  // Poll the API until the new planting appears (row-count check is unreliable with
+  // variety-grouped table where adding a 2nd planting of the same variety doesn't
+  // change tbody tr count)
+  let afterList = [];
+  let newPlanting = null;
+  for (let i = 0; i < 10; i++) {
+    const afterResp = await page.request.get('/api/plantings');
+    afterList = await afterResp.json();
+    newPlanting = afterList.find(p => !beforeIds.has(p.id));
+    if (newPlanting) break;
+    await page.waitForTimeout(400);
+  }
   if (newPlanting) createdPlantingIds.push(newPlanting.id);
 
   return { before, after: afterList.length, id: newPlanting?.id, seedName };
@@ -139,7 +146,7 @@ test('bulk log event applies to multiple plantings', async ({ page }) => {
   await page.goto('/');
 
   // Create 2 new plantings to use as our bulk targets
-  const { id: id1, seedName: seedName1 } = await createPlanting(page);
+  const { id: id1 } = await createPlanting(page);
   const { id: id2 } = await createPlanting(page);
 
   await page.locator('.nav-link', { hasText: 'Plantings' }).click();
@@ -148,14 +155,10 @@ test('bulk log event applies to multiple plantings', async ({ page }) => {
   // Enter bulk select mode
   await page.locator('button', { hasText: 'Select' }).first().click();
 
-  // Checkboxes should now be visible in table rows
-  const baseName = seedName1.split('(')[0].trim();
-  const targetRows = page.locator('tbody tr').filter({ hasText: baseName });
-
-  // Click the checkbox inside the first matching row
-  await targetRows.nth(0).locator('input[type="checkbox"]').click();
-  // Click the checkbox inside the second matching row (same seed variety, different planting)
-  await targetRows.nth(1).locator('input[type="checkbox"]').click();
+  // Target the exact rows by planting ID so we always hit our newly created plantings,
+  // regardless of how many pre-existing plantings of the same variety are present.
+  await page.locator(`tr[data-planting-id="${id1}"]`).locator('input[type="checkbox"]').click();
+  await page.locator(`tr[data-planting-id="${id2}"]`).locator('input[type="checkbox"]').click();
 
   // Floating bar should show 2 selected
   await expect(page.locator('.bulk-action-bar')).toContainText('2 plantings selected');

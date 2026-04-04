@@ -243,6 +243,7 @@ export default function Plantings({
                       return (
                         <React.Fragment key={p.id}>
                           <tr
+                            data-planting-id={p.id}
                             style={{
                               cursor: 'pointer',
                               background: isSelected ? '#f0ece6' : isSubRow ? color + '06' : isExpanded ? '#faf8f5' : undefined,
