@@ -1,0 +1,29 @@
+# docker-compose.test.yml — Ephemeral E2E test instance
+#
+# Spins up a clean, isolated container on port 8087 for Playwright tests.
+# Uses anonymous volumes that are wiped on `down -v` — always starts with
+# an empty database, exactly like CI.
+#
+# Do not use this file directly; run via:
+#   npm run test:e2e:clean       (from frontend/)
+#   bash scripts/test-e2e.sh    (from repo root)
+
+name: heirloom-test
+
+services:
+  heirloom-test:
+    build: .
+    container_name: heirloom-test
+    ports:
+      - "8087:8000"
+    volumes:
+      - heirloom-test-data:/app/data
+      - heirloom-test-photos:/app/photos
+    environment:
+      - DATABASE_URL=sqlite:////app/data/heirloom.db
+      - PHOTOS_DIR=/app/photos
+      - ANTHROPIC_API_KEY=dummy-not-used-in-e2e
+
+volumes:
+  heirloom-test-data:
+  heirloom-test-photos:
