@@ -20,9 +20,10 @@ describe('statusColor', () => {
   it('returns correct color for known status', () => {
     expect(statusColor('planned')).toBe('#9ca3af');
     expect(statusColor('started')).toBe('#8b5cf6');
-    expect(statusColor('growing')).toBe('#16a34a');
-    expect(statusColor('harvesting')).toBe('#ea580c');
-    expect(statusColor('done')).toBe('#6b7280');
+    expect(statusColor('germinated')).toBe('#16a34a');
+    expect(statusColor('transplanted')).toBe('#3b82f6');
+    expect(statusColor('harvested')).toBe('#ca8a04');
+    expect(statusColor('failed')).toBe('#6b7280');
   });
 
   it('returns fallback for unknown status', () => {

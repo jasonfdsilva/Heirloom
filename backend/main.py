@@ -519,8 +519,8 @@ def list_plantings(year: int = 2026):
             (d["id"],)
         ).fetchall()
         d["events"] = [dict(e) for e in events]
-        # Compute actual germination rate from logged germination events
-        germ_events = [e for e in d["events"] if e["event_type"] == "germination"]
+        # Compute actual germination rate from logged germinated events
+        germ_events = [e for e in d["events"] if e["event_type"] == "germinated"]
         total_germinated = sum(e["quantity"] or 0 for e in germ_events)
         qty_started = d.get("qty_started") or 0
         d["actual_germ_count"] = total_germinated

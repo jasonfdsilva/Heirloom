@@ -107,6 +107,9 @@ def init_db() -> None:  # pragma: no cover
             hardening_date TEXT,
             transplant_date TEXT,
             direct_sow_date TEXT,
+            method TEXT DEFAULT 'indoors',
+            purchased_date TEXT,
+            planted_out_date TEXT,
             first_harvest_date TEXT,
             status TEXT DEFAULT 'planned',
             notes TEXT,
@@ -264,6 +267,20 @@ def migrate_db() -> None:  # pragma: no cover
     planting_cols2 = [row[1] for row in conn.execute("PRAGMA table_info(plantings)").fetchall()]
     if "seed_lot_id" not in planting_cols2:
         conn.execute("ALTER TABLE plantings ADD COLUMN seed_lot_id INTEGER REFERENCES seed_lots(id)")
+
+    planting_cols3 = [row[1] for row in conn.execute("PRAGMA table_info(plantings)").fetchall()]
+    if "method" not in planting_cols3:
+        conn.execute("ALTER TABLE plantings ADD COLUMN method TEXT DEFAULT 'indoors'")
+        conn.execute("UPDATE plantings SET method = 'direct' WHERE direct_sow_date IS NOT NULL")
+    if "purchased_date" not in planting_cols3:
+        conn.execute("ALTER TABLE plantings ADD COLUMN purchased_date TEXT")
+    if "planted_out_date" not in planting_cols3:
+        conn.execute("ALTER TABLE plantings ADD COLUMN planted_out_date TEXT")
+
+    # Rename germination event_type to germinated (idempotent)
+    conn.execute(
+        "UPDATE planting_events SET event_type = 'germinated' WHERE event_type = 'germination'"
+    )
 
     conn.commit()
 

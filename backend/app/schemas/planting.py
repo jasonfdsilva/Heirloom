@@ -12,6 +12,9 @@ class PlantingCreate(BaseModel):
     hardening_date: Optional[str] = None
     transplant_date: Optional[str] = None
     direct_sow_date: Optional[str] = None
+    method: str = 'indoors'
+    purchased_date: Optional[str] = None
+    planted_out_date: Optional[str] = None
     first_harvest_date: Optional[str] = None
     status: str = "planned"
     notes: Optional[str] = None
@@ -26,6 +29,9 @@ class PlantingUpdate(BaseModel):
     hardening_date: Optional[str] = None
     transplant_date: Optional[str] = None
     direct_sow_date: Optional[str] = None
+    method: Optional[str] = None
+    purchased_date: Optional[str] = None
+    planted_out_date: Optional[str] = None
     first_harvest_date: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None

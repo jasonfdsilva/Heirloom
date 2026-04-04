@@ -35,7 +35,14 @@ def list_plantings(db: sqlite3.Connection, year: int = 2026) -> list:
             (d["id"],)
         ).fetchall()
         d["events"] = [dict(e) for e in events]
-        germ_events = [e for e in d["events"] if e["event_type"] == "germination"]
+        # Compute derived event metadata
+        d["last_event_type"] = d["events"][-1]["event_type"] if d["events"] else None
+        seen_types = []
+        for ev in d["events"]:
+            if ev["event_type"] not in seen_types:
+                seen_types.append(ev["event_type"])
+        d["all_event_types"] = seen_types
+        germ_events = [e for e in d["events"] if e["event_type"] == "germinated"]
         total_germinated = sum(e["quantity"] or 0 for e in germ_events)
         qty_started = d.get("qty_started") or 0
         d["actual_germ_count"] = total_germinated
@@ -57,11 +64,13 @@ def create_planting(db: sqlite3.Connection, data: PlantingCreate) -> dict:
     cursor = db.execute(
         """INSERT INTO plantings (seed_id, structure_id, year, qty_started, qty_planted,
            indoor_start_date, hardening_date, transplant_date, direct_sow_date,
+           method, purchased_date, planted_out_date,
            first_harvest_date, status, notes, seed_lot_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (data.seed_id, data.structure_id, data.year, data.qty_started, data.qty_planted,
          data.indoor_start_date, data.hardening_date, data.transplant_date,
-         data.direct_sow_date, data.first_harvest_date, data.status, data.notes,
+         data.direct_sow_date, data.method, data.purchased_date, data.planted_out_date,
+         data.first_harvest_date, data.status, data.notes,
          data.seed_lot_id)
     )
     db.commit()
@@ -95,11 +104,13 @@ def duplicate_planting(db: sqlite3.Connection, planting_id: int) -> dict:
     cursor = db.execute(
         """INSERT INTO plantings (seed_id, structure_id, year, qty_started, qty_planted,
            indoor_start_date, hardening_date, transplant_date, direct_sow_date,
+           method, purchased_date, planted_out_date,
            first_harvest_date, status, notes)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (o["seed_id"], None, o["year"], o.get("qty_started"), o.get("qty_planted"),
          o["indoor_start_date"], o["hardening_date"], o["transplant_date"],
-         o["direct_sow_date"], o["first_harvest_date"], o["status"], o["notes"])
+         o["direct_sow_date"], o.get("method", "indoors"), o.get("purchased_date"),
+         o.get("planted_out_date"), o["first_harvest_date"], o["status"], o["notes"])
     )
     db.commit()
     return {"id": cursor.lastrowid, "message": "Planting duplicated"}

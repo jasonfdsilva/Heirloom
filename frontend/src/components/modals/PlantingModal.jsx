@@ -1,6 +1,5 @@
 import React from 'react';
 import api from '../../lib/api';
-import { STATUS_LABELS } from '../../lib/constants';
 import { getSuggestedDates } from '../../lib/algorithms';
 
 export default function PlantingModal({ editData, setEditData, seeds, setSeeds, structures, lots = [], modalError, setModalError, onSubmit, onClose, isEdit = false, title = null }) {
@@ -109,7 +108,8 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
                   const seed = seeds.find(s => s.id === e.target.value);
                   if (seed) {
                     const suggested = getSuggestedDates(seed);
-                    setEditData(d => ({ ...d, seed_id: e.target.value, ...suggested }));
+                    const inferredMethod = seed.start_indoors ? 'indoors' : seed.direct_sow ? 'direct' : 'indoors';
+                    setEditData(d => ({ ...d, seed_id: e.target.value, method: inferredMethod, ...suggested }));
                   }
                 }}>
                   <option value="">Select a variety...</option>
@@ -167,6 +167,27 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
           </select>
         </div>
 
+        {editData.seed_id && (() => {
+          const seed = seeds.find(s => s.id === editData.seed_id);
+          const methodOptions = ['nursery'];
+          if (!seed || seed.start_indoors || (!seed.start_indoors && !seed.direct_sow)) methodOptions.unshift('indoors');
+          if (seed && seed.direct_sow) methodOptions.push('direct');
+          // ensure indoors is always available
+          if (!methodOptions.includes('indoors')) methodOptions.unshift('indoors');
+          return (
+            <div className="form-group">
+              <label className="form-label">Growing Method</label>
+              <select className="form-input" value={editData.method || 'indoors'} onChange={e => setEditData(d => ({ ...d, method: e.target.value }))}>
+                {methodOptions.map(m => (
+                  <option key={m} value={m}>
+                    {m === 'indoors' ? '🏠 Start Indoors' : m === 'direct' ? '🌿 Direct Sow' : '🛒 Nursery / Transplant'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
+
         <div className="grid-2">
           <div className="form-group">
             <label className="form-label">Started (under lights)</label>
@@ -179,35 +200,54 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
           </div>
         </div>
 
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Start Indoors</label>
-            <input type="date" className="form-input" value={editData.indoor_start_date || ''} onChange={e => setEditData(d => ({ ...d, indoor_start_date: e.target.value }))} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Harden Off</label>
-            <input type="date" className="form-input" value={editData.hardening_date || ''} onChange={e => setEditData(d => ({ ...d, hardening_date: e.target.value }))} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Transplant</label>
-            <input type="date" className="form-input" value={editData.transplant_date || ''} onChange={e => setEditData(d => ({ ...d, transplant_date: e.target.value }))} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Direct Sow</label>
-            <input type="date" className="form-input" value={editData.direct_sow_date || ''} onChange={e => setEditData(d => ({ ...d, direct_sow_date: e.target.value }))} />
-          </div>
-        </div>
+        {(() => {
+          const method = editData.method || 'indoors';
+          if (method === 'direct') {
+            return (
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Sow Date</label>
+                  <input type="date" className="form-input" value={editData.direct_sow_date || ''} onChange={e => setEditData(d => ({ ...d, direct_sow_date: e.target.value }))} />
+                </div>
+              </div>
+            );
+          }
+          if (method === 'nursery') {
+            return (
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Purchase Date</label>
+                  <input type="date" className="form-input" value={editData.purchased_date || ''} onChange={e => setEditData(d => ({ ...d, purchased_date: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Planted Out Date</label>
+                  <input type="date" className="form-input" value={editData.planted_out_date || ''} onChange={e => setEditData(d => ({ ...d, planted_out_date: e.target.value }))} />
+                </div>
+              </div>
+            );
+          }
+          // default: indoors
+          return (
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Start Date</label>
+                <input type="date" className="form-input" value={editData.indoor_start_date || ''} onChange={e => setEditData(d => ({ ...d, indoor_start_date: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Harden Off</label>
+                <input type="date" className="form-input" value={editData.hardening_date || ''} onChange={e => setEditData(d => ({ ...d, hardening_date: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Transplant Date</label>
+                <input type="date" className="form-input" value={editData.transplant_date || ''} onChange={e => setEditData(d => ({ ...d, transplant_date: e.target.value }))} />
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="form-group">
           <label className="form-label">First Harvest</label>
           <input type="date" className="form-input" value={editData.first_harvest_date || ''} onChange={e => setEditData(d => ({ ...d, first_harvest_date: e.target.value }))} />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Status</label>
-          <select className="form-input" value={editData.status || 'planned'} onChange={e => setEditData(d => ({ ...d, status: e.target.value }))}>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
         </div>
 
         <div className="form-group">

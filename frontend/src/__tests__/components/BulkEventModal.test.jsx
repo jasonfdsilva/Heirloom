@@ -58,12 +58,12 @@ describe('BulkEventModal', () => {
     expect(options).not.toContain('germination');
   });
 
-  it('includes other event types like note and fertilize', () => {
+  it('includes other event types like note and treatment', () => {
     render(<BulkEventModal {...defaultProps} />);
     const select = screen.getByRole('combobox');
     const options = Array.from(select.querySelectorAll('option')).map(o => o.value);
     expect(options).toContain('note');
-    expect(options).toContain('fertilize');
+    expect(options).toContain('treatment');
   });
 
   it('renders submit button with planting count label', () => {

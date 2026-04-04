@@ -31,8 +31,8 @@ def delete_event(event_id: int, db: sqlite3.Connection = Depends(get_db)):
 
 @router.post("/api/events/bulk")
 def create_bulk_events(data: BulkEventCreate, db: sqlite3.Connection = Depends(get_db)):
-    if data.event_type == 'germination':
-        raise HTTPException(422, "Germination is not supported in bulk mode")
+    if data.event_type == 'germinated':
+        raise HTTPException(422, "Germinated is not supported in bulk mode")
     if not data.planting_ids:
         raise HTTPException(422, "No planting IDs provided")
     for pid in data.planting_ids:

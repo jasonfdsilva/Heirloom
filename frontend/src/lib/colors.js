@@ -9,8 +9,16 @@ export const plantStatusColor = (s) => {
 
 export const statusColor = (status) => {
   const map = {
-    planned: '#9ca3af', started: '#8b5cf6', hardening: '#f59e0b',
-    transplanted: '#3b82f6', growing: '#16a34a', harvesting: '#ea580c', done: '#6b7280',
+    planned:      '#9ca3af',
+    started:      '#8b5cf6',
+    germinated:   '#16a34a',
+    'hardened off': '#f59e0b',
+    transplanted: '#3b82f6',
+    'sowed direct': '#65a30d',
+    purchased:    '#0891b2',
+    'planted out': '#059669',
+    harvested:    '#ca8a04',
+    failed:       '#6b7280',
   };
-  return map[status] || '#9ca3af';
+  return map[(status || '').toLowerCase()] || '#9ca3af';
 };

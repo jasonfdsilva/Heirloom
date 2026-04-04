@@ -1,8 +1,9 @@
 import React from 'react';
 import api from '../../lib/api';
-import { STATUS_LABELS, PLANT_STATUSES } from '../../lib/constants';
-import { catColor, statusColor, plantStatusColor } from '../../lib/colors';
+import { PLANT_STATUSES } from '../../lib/constants';
+import { catColor, plantStatusColor } from '../../lib/colors';
 import { formatDate } from '../../lib/formatters';
+import { deriveStatus } from '../../lib/plantingStatus';
 import EmptyState from '../common/EmptyState';
 
 export default function Plantings({
@@ -18,10 +19,12 @@ export default function Plantings({
 }) {
   const varietySummary = Object.values(
     plantings.reduce((acc, p) => {
-      if (!acc[p.seed_id]) acc[p.seed_id] = { name: p.seed_name, category: p.category, rows: 0, started: 0, planted: 0 };
+      if (!acc[p.seed_id]) acc[p.seed_id] = { name: p.seed_name, category: p.category, rows: 0, started: 0, planted: 0, statusMap: {} };
       acc[p.seed_id].rows += 1;
       acc[p.seed_id].started += p.qty_started || 0;
       acc[p.seed_id].planted += p.qty_planted || 0;
+      const ds = deriveStatus(p);
+      acc[p.seed_id].statusMap[ds.label] = ds;
       return acc;
     }, {})
   ).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
@@ -97,6 +100,7 @@ export default function Plantings({
                   <th>Variety</th>
                   <th style={{ textAlign: 'right' }}>Started</th>
                   <th style={{ textAlign: 'right' }}>Planted</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,7 +110,7 @@ export default function Plantings({
                   return (
                     <React.Fragment key={cat}>
                       <tr style={{ background: catColor(cat) + '18' }}>
-                        <td colSpan={3} style={{ fontWeight: 700, fontSize: 12, color: catColor(cat), textTransform: 'uppercase', letterSpacing: '0.05em', padding: '6px 12px' }}>
+                        <td colSpan={4} style={{ fontWeight: 700, fontSize: 12, color: catColor(cat), textTransform: 'uppercase', letterSpacing: '0.05em', padding: '6px 12px' }}>
                           <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: catColor(cat), marginRight: 6 }} />
                           {cat} — {catStarted} started, {catPlanted} planted
                         </td>
@@ -116,6 +120,15 @@ export default function Plantings({
                           <td style={{ fontWeight: 500, paddingLeft: 24 }}>{v.name}</td>
                           <td style={{ textAlign: 'right' }}>{v.started || '—'}</td>
                           <td style={{ textAlign: 'right' }}>{v.planted || '—'}</td>
+                          <td>
+                            {Object.values(v.statusMap).map(s => (
+                              <span key={s.label} style={{
+                                display: 'inline-block', padding: '1px 7px', borderRadius: 10,
+                                background: s.color + '22', color: s.color,
+                                fontSize: 11, marginRight: 3, fontWeight: 600, whiteSpace: 'nowrap'
+                              }}>{s.emoji} {s.label}</span>
+                            ))}
+                          </td>
                         </tr>
                       ))}
                     </React.Fragment>
@@ -125,6 +138,7 @@ export default function Plantings({
                   <td>Total — {grandVarieties} varieties</td>
                   <td style={{ textAlign: 'right' }}>{grandStarted}</td>
                   <td style={{ textAlign: 'right' }}>{grandPlanted}</td>
+                  <td></td>
                 </tr>
               </tbody>
             </table>
@@ -156,7 +170,7 @@ export default function Plantings({
                   <th>Started</th>
                   <th>Planted</th>
                   <th>Status</th>
-                  <th>Indoor Start</th>
+                  <th>Start</th>
                   <th>Transplant</th>
                   <th>Germ %</th>
                   <th>Actions</th>
@@ -305,10 +319,15 @@ export default function Plantings({
                                 {isProjected && <span style={{ fontSize: 11, color: '#d97706' }}>proj.</span>}
                               </div>
                             </td>
-                            <td>
-                              <span className="status-dot" style={{ background: statusColor(p.status) }}></span>
-                              <span style={{ fontSize: 13 }}>{STATUS_LABELS[p.status] || p.status}</span>
-                            </td>
+                            {(() => {
+                              const s = deriveStatus(p);
+                              return (
+                                <td>
+                                  <span className="status-dot" style={{ background: s.color }} />
+                                  <span style={{ fontSize: 13 }}>{s.emoji} {s.label}</span>
+                                </td>
+                              );
+                            })()}
                             <td style={{ fontSize: 13 }}>{formatDate(p.indoor_start_date)}</td>
                             <td style={{ fontSize: 13 }}>{formatDate(p.transplant_date)}</td>
                             <td style={{ fontSize: 13 }}>
@@ -383,8 +402,17 @@ export default function Plantings({
                       const seed = seeds.find(s => s.id === seedId);
                       const totalStarted = groupPlantings.reduce((s, p) => s + (p.qty_started || 0), 0);
                       const totalPlanted = groupPlantings.reduce((s, p) => s + (p.qty_planted || 0), 0);
-                      const statuses = [...new Set(groupPlantings.map(p => p.status))];
-                      const commonStatus = statuses.length === 1 ? statuses[0] : null;
+                      const derivedStatuses = [...new Set(groupPlantings.map(p => {
+                        const ds = deriveStatus(p);
+                        return ds.label;
+                      }))];
+                      const derivedStatusObjs = Object.values(
+                        groupPlantings.reduce((m, p) => {
+                          const ds = deriveStatus(p);
+                          m[ds.label] = ds;
+                          return m;
+                        }, {})
+                      );
 
                       const groupHeaderRow = (
                         <tr key={`group-${groupKey}`}
@@ -413,9 +441,13 @@ export default function Plantings({
                           <td style={{ fontSize: 13, fontWeight: 600 }}>{totalStarted || '—'}</td>
                           <td style={{ fontSize: 13, fontWeight: 600 }}>{totalPlanted || '—'}</td>
                           <td>
-                            {commonStatus
-                              ? <><span className="status-dot" style={{ background: statusColor(commonStatus) }}></span><span style={{ fontSize: 13 }}>{STATUS_LABELS[commonStatus] || commonStatus}</span></>
-                              : <span style={{ fontSize: 13, color: '#8a8580' }}>Mixed</span>}
+                            {derivedStatusObjs.map(s => (
+                              <span key={s.label} style={{
+                                display: 'inline-block', padding: '1px 7px', borderRadius: 10,
+                                background: s.color + '22', color: s.color,
+                                fontSize: 11, marginRight: 3, fontWeight: 600, whiteSpace: 'nowrap'
+                              }}>{s.emoji} {s.label}</span>
+                            ))}
                           </td>
                           <td colSpan={3}></td>
                           <td></td>
