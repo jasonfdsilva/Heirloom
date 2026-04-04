@@ -57,11 +57,12 @@ def create_planting(db: sqlite3.Connection, data: PlantingCreate) -> dict:
     cursor = db.execute(
         """INSERT INTO plantings (seed_id, structure_id, year, qty_started, qty_planted,
            indoor_start_date, hardening_date, transplant_date, direct_sow_date,
-           first_harvest_date, status, notes)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+           first_harvest_date, status, notes, seed_lot_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (data.seed_id, data.structure_id, data.year, data.qty_started, data.qty_planted,
          data.indoor_start_date, data.hardening_date, data.transplant_date,
-         data.direct_sow_date, data.first_harvest_date, data.status, data.notes)
+         data.direct_sow_date, data.first_harvest_date, data.status, data.notes,
+         data.seed_lot_id)
     )
     db.commit()
     return {"id": cursor.lastrowid, "message": "Planting created"}

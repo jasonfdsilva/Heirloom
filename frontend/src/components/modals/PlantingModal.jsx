@@ -3,7 +3,7 @@ import api from '../../lib/api';
 import { STATUS_LABELS } from '../../lib/constants';
 import { getSuggestedDates } from '../../lib/algorithms';
 
-export default function PlantingModal({ editData, setEditData, seeds, setSeeds, structures, modalError, setModalError, onSubmit, onClose, isEdit = false, title = null }) {
+export default function PlantingModal({ editData, setEditData, seeds, setSeeds, structures, lots = [], modalError, setModalError, onSubmit, onClose, isEdit = false, title = null }) {
   const categories = [...new Set(seeds.map(s => s.category))].sort();
   const allCategories = [...new Set([...categories, 'Flowers', 'Fruit', 'Other'])];
 
@@ -126,6 +126,24 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
             )}
           </div>
         )}
+
+        {editData.seed_id && (() => {
+          const seedLots = lots.filter(l => l.seed_id === editData.seed_id);
+          if (!seedLots.length) return null;
+          return (
+            <div className="form-group">
+              <label className="form-label">Seed Packet <span style={{ fontWeight: 400, fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>optional</span></label>
+              <select className="form-input" value={editData.seed_lot_id || ''} onChange={e => setEditData(d => ({ ...d, seed_lot_id: e.target.value ? parseInt(e.target.value) : null }))}>
+                <option value="">— Any packet —</option>
+                {seedLots.map(l => (
+                  <option key={l.id} value={l.id}>
+                    {l.lot_code} ({l.packed_for_year || '?'}{l.supplier ? ` · ${l.supplier}` : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
 
         <div className="form-group">
           <label className="form-label">Assign to Bed/Box</label>

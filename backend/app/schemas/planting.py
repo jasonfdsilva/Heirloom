@@ -15,6 +15,7 @@ class PlantingCreate(BaseModel):
     first_harvest_date: Optional[str] = None
     status: str = "planned"
     notes: Optional[str] = None
+    seed_lot_id: Optional[int] = None
 
 
 class PlantingUpdate(BaseModel):
@@ -28,6 +29,7 @@ class PlantingUpdate(BaseModel):
     first_harvest_date: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    seed_lot_id: Optional[int] = None
 
 
 class FamilyNotesUpdate(BaseModel):

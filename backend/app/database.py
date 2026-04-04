@@ -42,6 +42,26 @@ def seed_prefix(seed_name: str) -> str:
     return (words[0][0] + words[1][0]).upper()
 
 
+def lot_prefix(seed_name: str) -> str:
+    """Derive a lot code prefix from a seed name (up to 4 significant words, uppercase initials).
+
+    Stop-words are skipped: OG, F1, Hybrid, Mix, Heirloom.
+    Single-word names return first 2 chars. Multi-word names return initials (up to 4).
+
+    Examples:
+        'Cherokee Purple Tomato OG' → 'CPT'
+        'Sun Gold F1'               → 'SG'
+        'Shishito'                  → 'SH'
+    """
+    _stop = {"OG", "F1", "Hybrid", "Mix", "Heirloom"}
+    words = [w for w in seed_name.split() if w not in _stop]
+    if not words:
+        return seed_name[:2].upper()
+    if len(words) == 1:
+        return words[0][:2].upper()
+    return "".join(w[0] for w in words[:4]).upper()
+
+
 def init_db() -> None:  # pragma: no cover
     conn = _raw_conn()
     conn.executescript("""
@@ -145,6 +165,22 @@ def init_db() -> None:  # pragma: no cover
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_harvests_guid ON plant_harvests (plant_guid);
+
+        CREATE TABLE IF NOT EXISTS seed_lots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seed_id TEXT NOT NULL REFERENCES seeds(id) ON DELETE CASCADE,
+            lot_code TEXT UNIQUE NOT NULL,
+            packed_for_year INTEGER,
+            purchased_year INTEGER,
+            supplier TEXT,
+            supplier_lot TEXT,
+            sku TEXT,
+            germ_rate REAL,
+            notes TEXT,
+            packet_image_url TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_seed_lots_seed_id ON seed_lots (seed_id);
     """)
 
     # Seed initial data if empty
@@ -224,6 +260,10 @@ def migrate_db() -> None:  # pragma: no cover
     photo_cols = [row[1] for row in conn.execute("PRAGMA table_info(photos)").fetchall()]
     if "plant_guid" not in photo_cols:
         conn.execute("ALTER TABLE photos ADD COLUMN plant_guid TEXT")
+
+    planting_cols2 = [row[1] for row in conn.execute("PRAGMA table_info(plantings)").fetchall()]
+    if "seed_lot_id" not in planting_cols2:
+        conn.execute("ALTER TABLE plantings ADD COLUMN seed_lot_id INTEGER REFERENCES seed_lots(id)")
 
     conn.commit()
 

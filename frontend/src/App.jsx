@@ -13,6 +13,7 @@ import Photos from './components/views/Photos';
 import CalendarView from './components/views/CalendarView';
 import EventModal from './components/modals/EventModal';
 import BulkEventModal from './components/modals/BulkEventModal';
+import AddLotModal from './components/modals/AddLotModal';
 import PhotoModal from './components/modals/PhotoModal';
 import PlantingModal from './components/modals/PlantingModal';
 import QuickNoteModal from './components/modals/QuickNoteModal';
@@ -290,6 +291,7 @@ export default function App() {
     seeds, setSeeds,
     structures, setStructures,
     plantings, setPlantings,
+    lots, setLots,
     loading,
     mapGridCells, setMapGridCells,
     labelPositions, setLabelPositions,
@@ -372,7 +374,7 @@ export default function App() {
     const clean = {};
     const allowed = ['seed_id', 'structure_id', 'year', 'qty_started', 'qty_planted',
       'indoor_start_date', 'hardening_date', 'transplant_date', 'direct_sow_date',
-      'first_harvest_date', 'status', 'notes'];
+      'first_harvest_date', 'status', 'notes', 'seed_lot_id'];
     allowed.forEach(key => {
       if (data[key] !== undefined) clean[key] = data[key];
     });
@@ -475,6 +477,42 @@ export default function App() {
     setBulkSelectMode(false);
     setSelectedPlantingIds(new Set());
     loadData();
+  };
+
+  // ── Lot (Seed Packet) Handlers ─────────────────────────────────────────────
+
+  const [addLotSeedId, setAddLotSeedId] = useState(null); // seed to pre-select in AddLotModal
+  const [editingLot, setEditingLot] = useState(null);
+
+  const handleOpenAddLot = (seedId) => {
+    setAddLotSeedId(seedId);
+    setEditingLot(null);
+    setShowModal('add-lot');
+  };
+
+  const handleOpenEditLot = (lot) => {
+    setEditingLot(lot);
+    setAddLotSeedId(null);
+    setShowModal('add-lot');
+  };
+
+  const handleSubmitLot = async (payload, lotId) => {
+    if (lotId) {
+      await api.put(`/api/seed-lots/${lotId}`, payload);
+    } else {
+      await api.post('/api/seed-lots', payload);
+    }
+    const updatedLots = await api.get('/api/seed-lots');
+    setLots(updatedLots);
+    setShowModal(null);
+    setEditingLot(null);
+    setAddLotSeedId(null);
+  };
+
+  const handleDeleteLot = async (lotId) => {
+    await api.del(`/api/seed-lots/${lotId}`);
+    const updatedLots = await api.get('/api/seed-lots');
+    setLots(updatedLots);
   };
 
   const handleDeleteEvent = async (eventId) => {
@@ -669,6 +707,7 @@ export default function App() {
           {view === 'seeds' && (
             <Seeds
               seeds={seeds}
+              lots={lots}
               editData={editData}
               setEditData={setEditData}
               showModal={showModal}
@@ -676,6 +715,9 @@ export default function App() {
               collapsedSeedCategories={collapsedSeedCategories}
               setCollapsedSeedCategories={setCollapsedSeedCategories}
               loadData={loadData}
+              onAddLot={handleOpenAddLot}
+              onEditLot={handleOpenEditLot}
+              onDeleteLot={handleDeleteLot}
             />
           )}
           {view === 'plantings' && (
@@ -780,6 +822,7 @@ export default function App() {
             seeds={seeds}
             setSeeds={setSeeds}
             structures={structures}
+            lots={lots}
             modalError={modalError}
             setModalError={setModalError}
             onSubmit={showModal === 'edit-planting' ? handleUpdatePlanting : handleCreatePlanting}
@@ -810,6 +853,16 @@ export default function App() {
             onSubmit={handleCreateBulkEvent}
             onClose={() => { setShowModal(null); setEditData({}); setModalError(null); }}
             selectedPlantings={plantings.filter(p => selectedPlantingIds.has(p.id))}
+          />
+        )}
+
+        {showModal === 'add-lot' && (
+          <AddLotModal
+            seeds={seeds}
+            initialSeedId={addLotSeedId}
+            editLot={editingLot}
+            onSubmit={handleSubmitLot}
+            onClose={() => { setShowModal(null); setEditingLot(null); setAddLotSeedId(null); }}
           />
         )}
 

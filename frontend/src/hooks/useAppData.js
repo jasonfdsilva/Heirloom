@@ -5,18 +5,20 @@ export default function useAppData() {
   const [seeds, setSeeds] = useState([]);
   const [structures, setStructures] = useState([]);
   const [plantings, setPlantings] = useState([]);
+  const [lots, setLots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mapGridCells, setMapGridCells] = useState({});
   const [labelPositions, setLabelPositions] = useState({});
 
   const loadData = useCallback(async () => {
     try {
-      const [s, st, p] = await Promise.all([
+      const [s, st, p, l] = await Promise.all([
         api.get('/api/seeds'),
         api.get('/api/structures'),
         api.get('/api/plantings?year=2026'),
+        api.get('/api/seed-lots'),
       ]);
-      setSeeds(s); setStructures(st); setPlantings(p);
+      setSeeds(s); setStructures(st); setPlantings(p); setLots(l);
       const [gridResults, labelPos] = await Promise.all([
         Promise.all(st.map(str => api.get(`/api/structures/${str.id}/grid`).then(cells => [str.id, cells]))),
         api.get('/api/label-positions'),
@@ -50,6 +52,7 @@ export default function useAppData() {
     seeds, setSeeds,
     structures, setStructures,
     plantings, setPlantings,
+    lots, setLots,
     loading,
     mapGridCells, setMapGridCells,
     labelPositions, setLabelPositions,

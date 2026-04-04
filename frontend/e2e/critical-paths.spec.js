@@ -188,6 +188,58 @@ test('bulk log event applies to multiple plantings', async ({ page }) => {
   // Cleanup: plantings (and their events) will be deleted in afterAll
 });
 
+// ── 11. Add a seed lot manually and verify it appears in the seeds table ──────
+
+const createdLotIds = [];
+
+test('add a seed lot manually and verify it appears in the seeds table', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.nav-link', { hasText: 'Seeds' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Seed Inventory');
+
+  // Click the global "+ New Packet" button
+  await page.locator('button', { hasText: '+ New Packet' }).click();
+  await expect(page.locator('.modal-title')).toContainText('Add Seed Packet');
+
+  // Select the first seed from the dropdown (index 1 since index 0 is placeholder)
+  const seedSelect = page.locator('select.form-input').first();
+  await seedSelect.selectOption({ index: 1 });
+
+  // Wait for lot code to auto-fetch (the generate-code API call)
+  await page.waitForTimeout(600);
+
+  // Fill in year and supplier
+  const yearInput = page.locator('input[type="number"]').first();
+  await yearInput.fill('2026');
+  const supplierInput = page.locator('input[placeholder*="Johnny"]');
+  await supplierInput.fill('Test Supplier E2E');
+
+  // Submit
+  await page.locator('.modal-actions button.btn-primary').click();
+  await expect(page.locator('.modal-title')).not.toBeVisible();
+
+  // Verify via API that the lot was created
+  const resp = await page.request.get('/api/seed-lots');
+  const lots = await resp.json();
+  const created = lots.find(l => l.supplier === 'Test Supplier E2E');
+  expect(created).toBeTruthy();
+  expect(created.packed_for_year).toBe(2026);
+  if (created) createdLotIds.push(created.id);
+
+  // Expand the variety row to see lot sub-row
+  const expandBtn = page.locator('button', { hasText: '▶' }).first();
+  if (await expandBtn.isVisible()) {
+    await expandBtn.click();
+    await expect(page.getByText('Test Supplier E2E')).toBeVisible();
+  }
+});
+
+test.afterAll(async ({ request }) => {
+  for (const id of createdLotIds) {
+    await request.delete(`/api/seed-lots/${id}`).catch(() => {});
+  }
+});
+
 // ── 10. Export produces a JSON download ──────────────────────────────────────
 
 test('export button triggers a JSON download with expected keys', async ({ page }) => {

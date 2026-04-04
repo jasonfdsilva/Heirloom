@@ -57,10 +57,27 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             map_y REAL
         );
 
+        CREATE TABLE IF NOT EXISTS seed_lots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seed_id TEXT NOT NULL REFERENCES seeds(id) ON DELETE CASCADE,
+            lot_code TEXT UNIQUE NOT NULL,
+            packed_for_year INTEGER,
+            purchased_year INTEGER,
+            supplier TEXT,
+            supplier_lot TEXT,
+            sku TEXT,
+            germ_rate REAL,
+            notes TEXT,
+            packet_image_url TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_seed_lots_seed_id ON seed_lots (seed_id);
+
         CREATE TABLE IF NOT EXISTS plantings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             seed_id TEXT NOT NULL REFERENCES seeds(id),
             structure_id TEXT REFERENCES structures(id),
+            seed_lot_id INTEGER REFERENCES seed_lots(id),
             year INTEGER DEFAULT 2026,
             quantity INTEGER,
             qty_started INTEGER,
