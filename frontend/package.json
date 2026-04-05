@@ -14,7 +14,8 @@
     "test:e2e:clean": "bash ../scripts/test-e2e.sh",
     "sandbox:up": "docker compose -f ../docker-compose.dev.yml up -d --build",
     "sandbox:down": "docker compose -f ../docker-compose.dev.yml down",
-    "sandbox:snapshot": "cd .. && bash scripts/snapshot-to-dev.sh"
+    "sandbox:snapshot": "cd .. && bash scripts/snapshot-to-dev.sh",
+    "backup": "cd .. && bash scripts/backup.sh"
   },
   "dependencies": {
     "react": "^18.2.0",
