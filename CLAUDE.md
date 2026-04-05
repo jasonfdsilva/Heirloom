@@ -169,6 +169,7 @@ Every feature follows these steps in order:
 7. **Promote to prod** — rebuild and restart the production container at port 8085
 8. **Backup** — snapshot production data if schema changed
 9. **Git commit** — commit all changes with a descriptive message
+10. **Push to GitHub** — `git push origin main` to sync the remote
 
 ---
 
