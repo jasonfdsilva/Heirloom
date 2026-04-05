@@ -473,6 +473,7 @@ export default function App() {
     if (editData.severity) payload.severity = editData.severity;
     if (editData.product_used) payload.product_used = editData.product_used;
     const res = await api.post('/api/events/bulk', payload);
+    if (!res || res.detail) { setModalError(res?.detail || 'Failed to save events.'); return; }
     // Upload photo once, then link the same file to every remaining planting/event
     const attachedPhoto = (editData._photos || []).find(f => f instanceof File);
     if (attachedPhoto && res?.pairs?.length > 0) {

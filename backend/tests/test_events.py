@@ -137,14 +137,15 @@ def test_bulk_event_creates_for_all_plantings(client):
         assert events[0]["product_used"] == "Neptune's Harvest"
 
 
-def test_bulk_event_rejects_germination(client):
+def test_bulk_event_allows_germination(client):
     pid = _create_planting(client)
     r = client.post("/api/events/bulk", json={
         "planting_ids": [pid],
         "event_date": "2026-04-01",
-        "event_type": "germinated",
+        "event_type": "germination",
     })
-    assert r.status_code == 422
+    assert r.status_code == 200
+    assert r.json()["created"] == 1
 
 
 def test_bulk_event_rejects_missing_planting_id(client):

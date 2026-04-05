@@ -51,11 +51,11 @@ describe('BulkEventModal', () => {
     expect(screen.queryByText('Sun Gold Tomato')).not.toBeInTheDocument();
   });
 
-  it('excludes Germination from the event type dropdown', () => {
+  it('includes germination in the event type dropdown', () => {
     render(<BulkEventModal {...defaultProps} />);
     const select = screen.getByRole('combobox');
     const options = Array.from(select.querySelectorAll('option')).map(o => o.value);
-    expect(options).not.toContain('germination');
+    expect(options).toContain('germinated');
   });
 
   it('includes other event types like note and treatment', () => {

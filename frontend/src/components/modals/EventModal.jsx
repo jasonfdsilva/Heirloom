@@ -24,7 +24,7 @@ export default function EventModal({ editData, setEditData, modalError, setModal
           <input type="date" className="form-input" value={editData.event_date || today} onChange={e => setEditData(d => ({ ...d, event_date: e.target.value }))} />
         </div>
 
-        {editData.event_type === 'germination' && (
+        {editData.event_type === 'germinated' && (
           <div className="form-group">
             <label className="form-label">Seeds Sprouted (count)</label>
             <input type="number" min="1" className="form-input"

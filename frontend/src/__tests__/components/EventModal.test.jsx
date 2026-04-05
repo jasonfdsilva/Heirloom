@@ -120,7 +120,7 @@ describe('EventModal', () => {
   // ── germination event type ───────────────────────────────────────────────────
 
   it('shows quantity input for germination event type', () => {
-    render(<EventModal {...defaultProps} editData={{ event_type: 'germination' }} />);
+    render(<EventModal {...defaultProps} editData={{ event_type: 'germinated' }} />);
     expect(screen.getByText('Seeds Sprouted (count)')).toBeInTheDocument();
   });
 
@@ -128,7 +128,7 @@ describe('EventModal', () => {
     render(
       <EventModal
         {...defaultProps}
-        editData={{ event_type: 'germination', quantity: 8 }}
+        editData={{ event_type: 'germinated', quantity: 8 }}
         selectedPlanting={{ qty_started: 10 }}
       />
     );
@@ -139,7 +139,7 @@ describe('EventModal', () => {
     render(
       <EventModal
         {...defaultProps}
-        editData={{ event_type: 'germination' }}
+        editData={{ event_type: 'germinated' }}
         selectedPlanting={{ qty_started: 12 }}
       />
     );
@@ -151,7 +151,7 @@ describe('EventModal', () => {
     render(
       <EventModal
         {...defaultProps}
-        editData={{ event_type: 'germination' }}
+        editData={{ event_type: 'germinated' }}
         setEditData={setEditData}
         selectedPlanting={{ qty_started: 10 }}
       />
@@ -295,7 +295,7 @@ describe('EventModal', () => {
     const { container } = render(
       <EventModal
         {...defaultProps}
-        editData={{ event_type: 'germination' }}
+        editData={{ event_type: 'germinated' }}
         setEditData={executingMock}
         selectedPlanting={{ qty_started: 10 }}
       />
@@ -311,7 +311,7 @@ describe('EventModal', () => {
     const { container } = render(
       <EventModal
         {...defaultProps}
-        editData={{ event_type: 'germination', quantity: 5 }}
+        editData={{ event_type: 'germinated', quantity: 5 }}
         setEditData={executingMock}
         selectedPlanting={{ qty_started: 10 }}
       />

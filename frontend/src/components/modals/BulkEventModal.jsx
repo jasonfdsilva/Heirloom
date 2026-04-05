@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { EVENT_TYPES } from '../../lib/constants';
 
-// Germination excluded — per-planting quantity field doesn't apply in bulk mode
-const BULK_EVENT_TYPES = EVENT_TYPES.filter(t => t.value !== 'germination');
+// All event types available in bulk mode; germination simply omits the per-planting quantity field
+const BULK_EVENT_TYPES = EVENT_TYPES;
 
 export default function BulkEventModal({
   editData,
