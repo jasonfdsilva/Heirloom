@@ -3,7 +3,9 @@ import React from 'react';
 const NAV_VIEWS = ['dashboard', 'seeds', 'plantings', 'calendar', 'map', 'photos'];
 
 function navLabel(v) {
-  return v === 'map' ? 'Garden Map' : v.charAt(0).toUpperCase() + v.slice(1);
+  if (v === 'map') return 'Garden Map';
+  if (v === 'calendar') return 'Plan';
+  return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
 function isNavActive(view, navView) {

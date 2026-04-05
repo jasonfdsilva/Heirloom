@@ -4,7 +4,7 @@ const TABS = [
   { key: 'dashboard', icon: '🏠', label: 'Home' },
   { key: 'seeds',     icon: '🌱', label: 'Seeds' },
   { key: 'plantings', icon: '🌿', label: 'Plants' },
-  { key: 'calendar',  icon: '📅', label: 'Calendar' },
+  { key: 'calendar',  icon: '📅', label: 'Plan' },
   { key: 'map',       icon: '🗺️',  label: 'Map' },
   { key: 'photos',    icon: '📷', label: 'Photos' },
 ];
