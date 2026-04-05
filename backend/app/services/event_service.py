@@ -36,12 +36,17 @@ def delete_event(db: sqlite3.Connection, event_id: int) -> dict:
 def create_bulk_events(db: sqlite3.Connection, planting_ids: list, data: BulkEventCreate) -> dict:
     pairs = []
     for pid in planting_ids:
+        # For germination events, default quantity to qty_started (100% germination rate)
+        quantity = None
+        if data.event_type == "germinated":
+            row = db.execute("SELECT qty_started FROM plantings WHERE id = ?", (pid,)).fetchone()
+            quantity = row["qty_started"] if row and row["qty_started"] else None
         cursor = db.execute(
             """INSERT INTO planting_events
-               (planting_id, event_date, event_type, details, severity, product_used)
-               VALUES (?,?,?,?,?,?)""",
+               (planting_id, event_date, event_type, details, severity, product_used, quantity)
+               VALUES (?,?,?,?,?,?,?)""",
             (pid, data.event_date, data.event_type, data.details,
-             data.severity, data.product_used)
+             data.severity, data.product_used, quantity)
         )
         pairs.append({"event_id": cursor.lastrowid, "planting_id": pid})
     db.commit()

@@ -142,10 +142,53 @@ def test_bulk_event_allows_germination(client):
     r = client.post("/api/events/bulk", json={
         "planting_ids": [pid],
         "event_date": "2026-04-01",
-        "event_type": "germination",
+        "event_type": "germinated",
     })
     assert r.status_code == 200
     assert r.json()["created"] == 1
+
+
+def test_bulk_germination_sets_quantity_to_qty_started(client):
+    """Bulk germination events should default quantity to qty_started (100% rate)."""
+    # Create planting with qty_started = 10
+    r = client.post("/api/plantings", json={
+        "seed_id": "test-tomato", "year": 2026, "quantity": 4,
+        "status": "planned", "indoor_start_date": "2026-03-01",
+        "hardening_date": None, "transplant_date": None,
+        "direct_sow_date": None, "first_harvest_date": None,
+        "notes": None, "structure_id": None,
+        "qty_started": 10, "qty_planted": None,
+    })
+    pid = r.json()["id"]
+
+    bulk_r = client.post("/api/events/bulk", json={
+        "planting_ids": [pid],
+        "event_date": "2026-04-05",
+        "event_type": "germinated",
+    })
+    assert bulk_r.status_code == 200
+
+    # Verify the event was stored with quantity = qty_started
+    plantings = client.get("/api/plantings?year=2026").json()
+    planting = next(p for p in plantings if p["id"] == pid)
+    assert planting["actual_germ_count"] == 10
+    assert planting["actual_germ_rate"] == 100.0
+
+
+def test_bulk_germination_null_qty_started_stores_null_quantity(client):
+    """If qty_started is not set, bulk germination quantity stays null."""
+    pid = _create_planting(client)  # qty_started=None
+    bulk_r = client.post("/api/events/bulk", json={
+        "planting_ids": [pid],
+        "event_date": "2026-04-05",
+        "event_type": "germinated",
+    })
+    assert bulk_r.status_code == 200
+
+    plantings = client.get("/api/plantings?year=2026").json()
+    planting = next(p for p in plantings if p["id"] == pid)
+    assert planting["actual_germ_count"] == 0
+    assert planting["actual_germ_rate"] is None
 
 
 def test_bulk_event_rejects_missing_planting_id(client):
