@@ -16,7 +16,7 @@ export default function Dashboard({
   return (
     <div>
       <h1 className="page-title">Heirloom</h1>
-      <p className="page-sub">Garden Tracker, Berkeley Heights NJ, Zone 6b, 2026 Season</p>
+      <p className="page-sub">D'Silva Heirloom Garden · Berkeley Heights NJ · Zone 6b · 2026 Season</p>
 
       <div className="grid-4" style={{ marginBottom: 24 }}>
         <StatCard value={seeds.length} label="Seed Varieties" />
