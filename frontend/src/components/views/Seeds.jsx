@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import api from '../../lib/api';
 import { catColor } from '../../lib/colors';
 import ThumbPreview from '../common/ThumbPreview';
@@ -16,6 +16,8 @@ export default function Seeds({
 }) {
   const [groupBy, setGroupBy] = useState('category'); // 'category' | 'year'
   const [suggestingName, setSuggestingName] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
   const [showLotCode, setShowLotCode] = useState(
     () => localStorage.getItem('heirloom_seeds_showLotCode') === 'true'
   );
@@ -61,6 +63,7 @@ export default function Seeds({
       _seedSku: seed.sku || recentLot?.sku || '',
       _seedSpacing: seed.spacing_inches || 12,
       _seedImageUrl: seed.image_url || '',
+      _seedImageLocked: !!seed.image_locked,
       _seedShortLabel: seed.short_label || '',
       _seedImageLoading: false,
     });
@@ -94,6 +97,7 @@ export default function Seeds({
       lot: editData._seedLot || null,
       sku: editData._seedSku || null,
       image_url: editData._seedImageUrl || null,
+      image_locked: !!editData._seedImageLocked,
       short_label: editData._seedShortLabel || null,
     });
     setShowModal(null);
@@ -498,28 +502,58 @@ export default function Seeds({
             <div className="form-group">
               <label className="form-label">Plant Photo</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {editData._seedImageUrl ? (
-                  <img src={editData._seedImageUrl} alt={editData._seedName} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid #e8e4dd', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />
-                ) : (
-                  <div style={{ width: 64, height: 64, borderRadius: 8, border: '2px dashed #e8e4dd', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#ccc', flexShrink: 0 }}>🌿</div>
-                )}
-                <div style={{ flex: 1 }}>
-                  <button className="btn btn-secondary btn-sm" disabled={editData._seedImageLoading} onClick={async () => {
-                    setEditData(d => ({ ...d, _seedImageLoading: true }));
-                    const params = new URLSearchParams({ q: editData._seedName || '' });
-                    if (editData._seedCommonName) params.set('common_name', editData._seedCommonName);
-                    if (editData._seedSpecies) params.set('species', editData._seedSpecies);
-                    const cat = editData._seedCategory === '_custom' ? editData._seedCategoryText : editData._seedCategory;
-                    if (cat) params.set('category', cat);
-                    const res = await api.get(`/api/seeds/image-search?${params.toString()}`);
-                    setEditData(d => ({ ...d, _seedImageUrl: res.image_url || d._seedImageUrl, _seedImageLoading: false }));
-                  }}>
-                    {editData._seedImageLoading ? 'Searching...' : '🔍 Find Image'}
-                  </button>
-                  {editData._seedImageUrl && (
-                    <button className="btn btn-sm" style={{ marginLeft: 8, background: 'none', border: 'none', color: '#8a8580', cursor: 'pointer', fontSize: 12 }} onClick={() => setEditData(d => ({ ...d, _seedImageUrl: '' }))}>✕ Remove</button>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  {editData._seedImageUrl ? (
+                    <img src={editData._seedImageUrl} alt={editData._seedName} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
+                  ) : (
+                    <div style={{ width: 64, height: 64, borderRadius: 8, border: '2px dashed #e8e4dd', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#ccc' }}>🌿</div>
                   )}
-                  <div style={{ fontSize: 11, color: '#8a8580', marginTop: 4 }}>Auto-fetched from Wikipedia. Shown in bed planner grid.</div>
+                  {editData._seedImageLocked && (
+                    <div style={{ position: 'absolute', bottom: -4, right: -4, background: '#2d2a24', color: '#fff', borderRadius: 4, fontSize: 9, padding: '1px 4px', lineHeight: 1.5 }}>🔒</div>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="btn btn-secondary btn-sm" disabled={editData._seedImageLoading} onClick={async () => {
+                      setEditData(d => ({ ...d, _seedImageLoading: true }));
+                      const params = new URLSearchParams({ q: editData._seedName || '' });
+                      if (editData._seedCommonName) params.set('common_name', editData._seedCommonName);
+                      if (editData._seedSpecies) params.set('species', editData._seedSpecies);
+                      const cat = editData._seedCategory === '_custom' ? editData._seedCategoryText : editData._seedCategory;
+                      if (cat) params.set('category', cat);
+                      const res = await api.get(`/api/seeds/image-search?${params.toString()}`);
+                      setEditData(d => ({ ...d, _seedImageUrl: res.image_url || d._seedImageUrl, _seedImageLoading: false }));
+                    }}>
+                      {editData._seedImageLoading ? 'Searching...' : '🔍 Find Image'}
+                    </button>
+                    <button className="btn btn-secondary btn-sm" disabled={uploadingImage} onClick={() => fileInputRef.current?.click()}>
+                      {uploadingImage ? 'Uploading...' : '📷 Upload'}
+                    </button>
+                    {editData._seedImageUrl && (
+                      <button className="btn btn-sm" style={{ background: 'none', border: 'none', color: '#8a8580', cursor: 'pointer', fontSize: 12 }} onClick={() => setEditData(d => ({ ...d, _seedImageUrl: '' }))}>✕ Remove</button>
+                    )}
+                  </div>
+                  <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
+                    const file = e.target.files[0];
+                    if (!file || !editData._seedId) return;
+                    setUploadingImage(true);
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    try {
+                      const res = await api.upload(`/api/seeds/${editData._seedId}/image`, formData);
+                      if (res.image_url) setEditData(d => ({ ...d, _seedImageUrl: res.image_url, _seedImageLocked: true }));
+                    } catch (_) {}
+                    setUploadingImage(false);
+                    e.target.value = '';
+                  }} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, cursor: 'pointer', fontSize: 12, color: '#2d2a24' }}>
+                    <input type="checkbox" checked={!!editData._seedImageLocked}
+                      onChange={e => setEditData(d => ({ ...d, _seedImageLocked: e.target.checked }))} />
+                    🔒 Lock image — Fetch Images will never overwrite this
+                  </label>
+                  <div style={{ fontSize: 11, color: '#8a8580', marginTop: 2 }}>
+                    Uploads are locked automatically.
+                  </div>
                 </div>
               </div>
             </div>

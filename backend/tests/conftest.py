@@ -45,6 +45,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             spacing_inches INTEGER DEFAULT 12,
             notes TEXT,
             image_url TEXT,
+            image_locked INTEGER DEFAULT 0,
             short_label TEXT
         );
 

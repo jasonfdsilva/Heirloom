@@ -242,6 +242,8 @@ def migrate_db() -> None:  # pragma: no cover
         conn.execute("ALTER TABLE seeds ADD COLUMN short_label TEXT")
     if "common_name" not in seed_cols:
         conn.execute("ALTER TABLE seeds ADD COLUMN common_name TEXT")
+    if "image_locked" not in seed_cols:
+        conn.execute("ALTER TABLE seeds ADD COLUMN image_locked INTEGER DEFAULT 0")
 
     lp_cols = [row[1] for row in conn.execute("PRAGMA table_info(label_positions)").fetchall()]
     if "orientation" not in lp_cols:

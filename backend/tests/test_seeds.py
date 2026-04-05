@@ -214,3 +214,36 @@ def test_suggest_common_name_mocked(client, monkeypatch):
 def test_suggest_common_name_not_found(client):
     r = client.get("/api/seeds/does-not-exist/suggest-common-name")
     assert r.status_code == 404
+
+
+def test_image_locked_persists(client):
+    payload = {
+        "name": "Locked Lettuce", "category": "Greens", "variety": "Locked Lettuce",
+        "image_url": "https://example.com/lettuce.jpg", "image_locked": True,
+    }
+    r = client.post("/api/seeds", json=payload)
+    assert r.status_code == 200
+    sid = r.json()["id"]
+    seed = client.get("/api/seeds").json()
+    locked = next(s for s in seed if s["id"] == sid)
+    assert locked["image_locked"] == 1
+
+
+def test_update_seed_image_locked(client):
+    r = client.post("/api/seeds", json={"name": "Unlock Test", "category": "Greens"})
+    sid = r.json()["id"]
+    client.put(f"/api/seeds/{sid}", json={
+        "name": "Unlock Test", "category": "Greens",
+        "image_url": "https://example.com/img.jpg", "image_locked": True,
+    })
+    seeds = client.get("/api/seeds").json()
+    s = next(x for x in seeds if x["id"] == sid)
+    assert s["image_locked"] == 1
+    # Now unlock
+    client.put(f"/api/seeds/{sid}", json={
+        "name": "Unlock Test", "category": "Greens",
+        "image_url": "https://example.com/img.jpg", "image_locked": False,
+    })
+    seeds = client.get("/api/seeds").json()
+    s = next(x for x in seeds if x["id"] == sid)
+    assert s["image_locked"] == 0

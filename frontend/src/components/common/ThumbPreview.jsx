@@ -4,7 +4,7 @@ import React, { useState } from 'react';
  * Thumbnail image with a hover-to-preview popup (180×180).
  * Renders a colour placeholder when no url is provided.
  */
-export default function ThumbPreview({ url, alt = '', color = '#888', opacity = 0.3, size = 44 }) {
+export default function ThumbPreview({ url, alt = '', color = '#888', opacity = 0.3, size = 44, locked = false }) {
   const [popup, setPopup] = useState(null);
 
   const handleEnter = (e) => {
@@ -16,7 +16,7 @@ export default function ThumbPreview({ url, alt = '', color = '#888', opacity = 
   };
 
   return (
-    <div style={{ flexShrink: 0 }} onMouseEnter={handleEnter} onMouseLeave={() => setPopup(null)}>
+    <div style={{ flexShrink: 0, position: 'relative' }} onMouseEnter={handleEnter} onMouseLeave={() => setPopup(null)}>
       {url ? (
         <img
           src={url} alt={alt}
@@ -25,6 +25,14 @@ export default function ThumbPreview({ url, alt = '', color = '#888', opacity = 
         />
       ) : (
         <div style={{ width: size, height: size, borderRadius: 6, background: color, opacity }} />
+      )}
+      {locked && (
+        <div style={{
+          position: 'absolute', bottom: -3, right: -3,
+          background: '#2d2a24', color: '#fff',
+          borderRadius: 4, fontSize: 9, padding: '1px 3px', lineHeight: 1.5,
+          pointerEvents: 'none', zIndex: 1,
+        }}>🔒</div>
       )}
       {popup && url && (
         <div style={{

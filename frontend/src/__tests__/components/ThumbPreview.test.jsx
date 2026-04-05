@@ -41,6 +41,16 @@ describe('ThumbPreview', () => {
     expect(screen.getByRole('img')).toHaveStyle({ width: '60px', height: '60px' });
   });
 
+  it('shows lock badge when locked=true', () => {
+    const { container } = render(<ThumbPreview url="/test.jpg" alt="test" color="#888" locked={true} />);
+    expect(container.textContent).toContain('🔒');
+  });
+
+  it('does not show lock badge when locked=false', () => {
+    const { container } = render(<ThumbPreview url="/test.jpg" alt="test" color="#888" locked={false} />);
+    expect(container.textContent).not.toContain('🔒');
+  });
+
   it('applies custom opacity to placeholder', () => {
     const { container } = render(<ThumbPreview url={null} color="#888" opacity={0.5} />);
     const placeholder = container.querySelector('div > div > div');
