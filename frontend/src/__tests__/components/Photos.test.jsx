@@ -103,4 +103,62 @@ describe('Photos', () => {
     render(<Photos {...baseProps} allPhotos={mockPhotos} />);
     expect(screen.getByText('First sprouts')).toBeInTheDocument();
   });
+
+  // ── branch coverage: null / missing fields ────────────────────────────────────
+
+  it('renderPhotoCard shows "Unknown" label in By Time grouping when seed_name is null', () => {
+    const photosNoName = [{ id: 1, planting_id: 1, filename: 'a.jpg', taken_date: '2026-03-01', seed_name: null, category: 'Greens', caption: null }];
+    render(<Photos {...baseProps} allPhotos={photosNoName} photosGrouping="time" />);
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+  });
+
+  it('categoryGroups handles photo with null planting_id (key = "unknown")', () => {
+    const photosNoPid = [{
+      id: 1, planting_id: null, filename: 'a.jpg',
+      taken_date: '2026-04-01', seed_name: null, category: null, caption: null,
+    }];
+    // Should render without crashing; the group label falls back to 'Unknown Planting'
+    render(<Photos {...baseProps} allPhotos={photosNoPid} photosGrouping="planting" />);
+    expect(screen.getByText('Other')).toBeInTheDocument();
+  });
+
+  it('By Planting grouping shows "varieties" (plural) when multiple varieties in a category', () => {
+    const twoVarieties = [
+      { id: 1, planting_id: 1, filename: 'a.jpg', taken_date: '2026-04-01', seed_name: 'Sun Gold', category: 'Tomatoes', caption: null },
+      { id: 2, planting_id: 2, filename: 'b.jpg', taken_date: '2026-04-02', seed_name: 'Cherokee Purple', category: 'Tomatoes', caption: null },
+    ];
+    render(<Photos {...baseProps} allPhotos={twoVarieties} photosGrouping="planting" />);
+    expect(screen.getByText(/2 varieties/)).toBeInTheDocument();
+  });
+
+  it('By Planting grouping shows "photos" (plural) when a category has multiple photos', () => {
+    const twoPhotos = [
+      { id: 1, planting_id: 1, filename: 'a.jpg', taken_date: '2026-04-01', seed_name: 'Sun Gold', category: 'Tomatoes', caption: null },
+      { id: 2, planting_id: 1, filename: 'b.jpg', taken_date: '2026-04-02', seed_name: 'Sun Gold', category: 'Tomatoes', caption: null },
+    ];
+    render(<Photos {...baseProps} allPhotos={twoPhotos} photosGrouping="planting" />);
+    // Both the category header and variety row show "2 photos"
+    const matches = screen.getAllByText(/2 photos/);
+    expect(matches.length).toBeGreaterThan(0);
+  });
+
+  it('By Planting grouping shows "photos" (plural) per variety when variety has 2+ photos', () => {
+    const twoPhotos = [
+      { id: 1, planting_id: 1, filename: 'a.jpg', taken_date: '2026-04-01', seed_name: 'Sun Gold', category: 'Tomatoes', caption: null },
+      { id: 2, planting_id: 1, filename: 'b.jpg', taken_date: '2026-04-05', seed_name: 'Sun Gold', category: 'Tomatoes', caption: null },
+    ];
+    render(<Photos {...baseProps} allPhotos={twoPhotos} photosGrouping="planting" />);
+    // The inner planting row shows "2 photos"
+    const photoCountTexts = screen.getAllByText(/2 photos/);
+    expect(photoCountTexts.length).toBeGreaterThan(0);
+  });
+
+  it('By Planting grouping category with no category field falls back to "Other"', () => {
+    const photosNoCategory = [{
+      id: 5, planting_id: 5, filename: 'e.jpg',
+      taken_date: '2026-05-01', seed_name: 'Mystery Plant', category: '', caption: null,
+    }];
+    render(<Photos {...baseProps} allPhotos={photosNoCategory} photosGrouping="planting" />);
+    expect(screen.getByText('Other')).toBeInTheDocument();
+  });
 });

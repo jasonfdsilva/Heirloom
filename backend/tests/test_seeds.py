@@ -247,3 +247,70 @@ def test_update_seed_image_locked(client):
     seeds = client.get("/api/seeds").json()
     s = next(x for x in seeds if x["id"] == sid)
     assert s["image_locked"] == 0
+
+
+# ── image-search endpoint ─────────────────────────────────────────────────────
+
+def test_image_search_endpoint(client, monkeypatch):
+    """GET /api/seeds/image-search proxies to seed_service.search_image."""
+    import backend.app.services.seed_service as svc
+    monkeypatch.setattr(svc, "search_image",
+                        lambda q, **kwargs: {"url": "https://example.com/kale.jpg"})
+    r = client.get("/api/seeds/image-search?q=kale")
+    assert r.status_code == 200
+    assert r.json()["url"] == "https://example.com/kale.jpg"
+
+
+def test_image_search_with_optional_params(client, monkeypatch):
+    """image-search forwards common_name, species, category kwargs."""
+    import backend.app.services.seed_service as svc
+    captured = {}
+
+    def fake_search(q, **kwargs):
+        captured.update(kwargs)
+        return {"url": None}
+
+    monkeypatch.setattr(svc, "search_image", fake_search)
+    client.get("/api/seeds/image-search?q=kale&common_name=Kale&species=Brassica&category=Greens")
+    assert captured.get("common_name") == "Kale"
+    assert captured.get("category") == "Greens"
+
+
+# ── fetch-images endpoint ─────────────────────────────────────────────────────
+
+def test_fetch_all_images_endpoint(client, monkeypatch):
+    """POST /api/seeds/fetch-images delegates to seed_service.fetch_all_images."""
+    import backend.app.services.seed_service as svc
+    monkeypatch.setattr(svc, "fetch_all_images",
+                        lambda db: {"updated": 3, "skipped": 1})
+    r = client.post("/api/seeds/fetch-images")
+    assert r.status_code == 200
+    assert r.json()["updated"] == 3
+
+
+# ── upload seed image endpoint ────────────────────────────────────────────────
+
+def test_upload_seed_image_not_found(client):
+    """POST /api/seeds/<missing>/image returns 404."""
+    import io
+    r = client.post(
+        "/api/seeds/does-not-exist/image",
+        files={"file": ("test.jpg", io.BytesIO(b"data"), "image/jpeg")},
+    )
+    assert r.status_code == 404
+
+
+def test_upload_seed_image_success(client, monkeypatch):
+    """POST /api/seeds/<id>/image calls upload_seed_image and returns result."""
+    import io
+    import backend.app.services.seed_service as svc
+    monkeypatch.setattr(
+        svc, "upload_seed_image",
+        lambda db, seed_id, filename, content: {"image_url": "/photos/test.jpg", "image_locked": True},
+    )
+    r = client.post(
+        "/api/seeds/test-lettuce/image",
+        files={"file": ("photo.jpg", io.BytesIO(b"img-bytes"), "image/jpeg")},
+    )
+    assert r.status_code == 200
+    assert r.json()["image_url"] == "/photos/test.jpg"

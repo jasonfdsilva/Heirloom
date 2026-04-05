@@ -139,4 +139,13 @@ describe('Lightbox', () => {
     render(<Lightbox {...baseProps} photos={photos} index={0} titleKey="seed_name" />);
     expect(screen.queryByText('Sun Gold')).not.toBeInTheDocument();
   });
+
+  it('stops propagation when clicking the photo image', () => {
+    const onClose = vi.fn();
+    render(<Lightbox {...baseProps} onClose={onClose} />);
+    // Click on the photo itself — should NOT trigger onClose (stopPropagation)
+    const imgs = document.querySelectorAll('img');
+    fireEvent.click(imgs[0]);
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

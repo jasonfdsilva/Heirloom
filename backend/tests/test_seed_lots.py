@@ -295,3 +295,62 @@ def test_extract_packet_mocked(client, monkeypatch):
     assert result["name"] == "Cherokee Purple Tomato"
     assert result["packed_for_year"] == 2026
     assert result["germ_rate"] == 88.0
+
+
+# ── router error-path coverage ────────────────────────────────────────────────
+
+def test_create_lot_value_error_non_not_found(client, monkeypatch):
+    """ValueError without 'not found' in message → 400."""
+    def raise_bad_value(db, data):
+        raise ValueError("invalid germ_rate value")
+
+    monkeypatch.setattr(seed_lot_service, "create_lot", raise_bad_value)
+    r = client.post("/api/seed-lots", json={"seed_id": "test-pepper", "packed_for_year": 2026})
+    assert r.status_code == 400
+    assert "invalid germ_rate" in r.json()["detail"]
+
+
+def test_create_lot_generic_exception(client, monkeypatch):
+    """Non-UNIQUE generic exception in create_lot → 400."""
+    def raise_generic(db, data):
+        raise RuntimeError("unexpected db error")
+
+    monkeypatch.setattr(seed_lot_service, "create_lot", raise_generic)
+    r = client.post("/api/seed-lots", json={"seed_id": "test-pepper", "packed_for_year": 2026})
+    assert r.status_code == 400
+
+
+def test_update_lot_generic_exception(client, monkeypatch):
+    """Non-UNIQUE exception in update_lot → 400."""
+    create_r = client.post(
+        "/api/seed-lots", json={"seed_id": "test-tomato", "packed_for_year": 2026}
+    )
+    lot_id = create_r.json()["id"]
+
+    def raise_generic(db, lot_id, data):
+        raise RuntimeError("unexpected update error")
+
+    monkeypatch.setattr(seed_lot_service, "update_lot", raise_generic)
+    r = client.put(f"/api/seed-lots/{lot_id}", json={"supplier": "Acme"})
+    assert r.status_code == 400
+
+
+# ── service-layer unit tests ──────────────────────────────────────────────────
+
+def test_get_lot_not_found(test_db):
+    """get_lot returns None when the lot_id doesn't exist."""
+    result = seed_lot_service.get_lot(test_db, 99999)
+    assert result is None
+
+
+def test_get_lot_found(test_db):
+    """get_lot returns a dict when the lot exists."""
+    test_db.execute(
+        "INSERT INTO seed_lots (seed_id, lot_code, packed_for_year) VALUES (?,?,?)",
+        ("test-pepper", "SH-2026-001", 2026),
+    )
+    test_db.commit()
+    row = test_db.execute("SELECT id FROM seed_lots WHERE lot_code = 'SH-2026-001'").fetchone()
+    result = seed_lot_service.get_lot(test_db, row["id"])
+    assert result is not None
+    assert result["lot_code"] == "SH-2026-001"

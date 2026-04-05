@@ -121,6 +121,34 @@ def test_list_plant_photos_with_data(client, tmp_path, monkeypatch):
     assert list_r.json()[0]["caption"] == "closeup"
 
 
+def test_upload_plant_photo_invalid_extension_defaults_to_jpg(client, tmp_path, monkeypatch):
+    """Uploading a plant photo with an unsupported extension (e.g. .bmp) saves as .jpg.
+
+    The extension-normalisation code lives in upload_plant_photo (plant-guid route),
+    not in upload_photo (planting route), so this test must call the plant endpoint.
+    """
+    import backend.app.services.photo_service as ps
+    monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))
+
+    pid = _create_planting(client)
+    # Paint a grid cell to obtain a plant_guid
+    client.post("/api/structures/test-bed-1/grid", json={
+        "planting_id": pid,
+        "cells": [{"row": 0, "col": 0}],
+    })
+    cells = client.get("/api/structures/test-bed-1/grid").json()
+    plant_guid = cells[0]["plant_guid"]
+
+    r = client.post(
+        f"/api/plants/{plant_guid}/photos",
+        files={"file": ("scan.bmp", io.BytesIO(b"bmp-data"), "image/bmp")},
+        data={"planting_id": str(pid), "caption": "", "taken_date": ""},
+    )
+    assert r.status_code == 200
+    # .bmp is unsupported → service normalises to .jpg
+    assert r.json()["filename"].endswith(".jpg")
+
+
 def test_delete_photo(client, tmp_path, monkeypatch):
     import backend.app.services.photo_service as ps
     monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))

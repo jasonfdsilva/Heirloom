@@ -353,5 +353,109 @@ describe('AddLotModal', () => {
     expect(options[0].text).toContain('Amish Paste');
     expect(options[1].text).toContain('Zucchini Giant');
   });
+
+  // ── branch coverage for variety select onChange (lines 267-283) ───────────────
+
+  it('variety option shows no category suffix when seed has no category', () => {
+    // Exercises the `s.category ? ` (${s.category})` : ''` false branch (line 283)
+    const seeds = [{ id: 'no-cat', name: 'Mystery Plant', category: null, species: null }];
+    render(<AddLotModal {...defaultProps} seeds={seeds} />);
+    const selects = screen.getAllByRole('combobox');
+    const options = Array.from(selects[0].options).filter(o => o.value !== '');
+    // Should show just the name, no (category) suffix
+    expect(options[0].text).toBe('Mystery Plant');
+  });
+
+  it('sorts seeds with mixed null/non-null categories covering a.category || "" branches', () => {
+    // Seeds: one with null category and one with a real category triggers both <, >, = branches
+    const seeds = [
+      { id: 'zzz', name: 'Zzz Herb', category: 'Zymurgy', species: null },    // last alphabetically
+      { id: 'aaa', name: 'Aaa Herb', category: null, species: null },          // null category → ''
+      { id: 'mmm', name: 'Mmm Herb', category: 'Herbs', species: null },       // middle
+    ];
+    render(<AddLotModal {...defaultProps} seeds={seeds} />);
+    const selects = screen.getAllByRole('combobox');
+    const options = Array.from(selects[0].options).filter(o => o.value !== '');
+    // Sorted: '' < 'Herbs' < 'Zymurgy'
+    expect(options[0].value).toBe('aaa');
+    expect(options[1].value).toBe('mmm');
+    expect(options[2].value).toBe('zzz');
+  });
+
+  it('clearing the scan file input covers the || null branch', () => {
+    // When the file input fires change with no files, setScanFile receives null
+    const { container } = render(<AddLotModal {...defaultProps} />);
+    fireEvent.click(screen.getByText('📷 Scan Packet'));
+    const fileInput = container.querySelector('input[type="file"]');
+    // Fire change with empty files list (no file selected)
+    fireEvent.change(fileInput, { target: { files: [] } });
+    // The Extract button should remain disabled (no file selected)
+    expect(screen.getByRole('button', { name: 'Extract from Packet' })).toBeDisabled();
+  });
+
+  it('variety select onChange with a seed that has no species covers the || branches', async () => {
+    // seed?.species || '' false branch (line 268); also species-less option
+    const seeds = [{ id: 'no-species', name: 'Bare Herb', category: 'Herbs', species: null }];
+    render(<AddLotModal {...defaultProps} seeds={seeds} />);
+    const selects = screen.getAllByRole('combobox');
+    // Change variety select to the seed with no species
+    await act(async () => {
+      fireEvent.change(selects[0], { target: { value: 'no-species' } });
+    });
+    // The component renders without error; the species field defaults to ''
+    expect(selects[0].value).toBe('no-species');
+  });
+
+  it('selecting empty variety option covers seed-undefined || fallback branches', async () => {
+    // When the empty option ("Select variety…") is chosen, seed is undefined.
+    // This exercises seed?.category, seed?.species, seed?.name || d._varietySearch, etc.
+    render(<AddLotModal {...defaultProps} initialSeedId="test-tomato" />);
+    const selects = screen.getAllByRole('combobox');
+    // First set a real seed, then switch back to the empty option
+    await act(async () => {
+      fireEvent.change(selects[0], { target: { value: '' } });
+    });
+    // Component should still render without crashing
+    expect(selects[0]).toBeInTheDocument();
+  });
+
+  // ── branch coverage: supplier truthy path (line 141) ─────────────────────────
+
+  it('submit with non-empty supplier covers the truthy supplier || null branch', async () => {
+    const onSubmit = vi.fn();
+    render(<AddLotModal {...defaultProps} initialSeedId="test-tomato" onSubmit={onSubmit} />);
+    // Set a non-empty supplier
+    const supplier = screen.getByPlaceholderText("e.g. Johnny's, Seed Savers, Burpee");
+    fireEvent.change(supplier, { target: { value: "Johnny's" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Packet' }));
+    });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const [payload] = onSubmit.mock.calls[0];
+    // supplier is truthy — should be passed through (not null)
+    expect(payload.supplier).toBe("Johnny's");
+  });
+
+  // ── branch coverage: "Matched to existing variety" hint (line 294-295) ────────
+
+  it('shows "Matched to existing variety" hint when scanned name matches a seed', async () => {
+    // api.upload returns a name that EXACTLY matches an existing seed
+    api.upload.mockResolvedValueOnce({
+      name: 'Sun Gold',  // matches test-tomato
+      category: 'Tomatoes', supplier: null, packed_for_year: 2026,
+      germ_rate: null, supplier_lot: null, sku: null, organic: false, notes: null,
+    });
+    const { container } = render(<AddLotModal {...defaultProps} />);
+    fireEvent.click(screen.getByText('📷 Scan Packet'));
+    const fileInput = container.querySelector('input[type="file"]');
+    const file = new File(['img'], 'packet.jpg', { type: 'image/jpeg' });
+    await act(async () => { fireEvent.change(fileInput, { target: { files: [file] } }); });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Extract from Packet' }));
+    });
+    await waitFor(() =>
+      expect(screen.getByText('✓ Matched to existing variety')).toBeInTheDocument()
+    );
+  });
 });
 

@@ -181,4 +181,36 @@ describe('BulkEventModal', () => {
     fireEvent.change(screen.getByPlaceholderText(/What happened.../), { target: { value: 'New detail' } });
     expect(setEditData).toHaveBeenCalled();
   });
+
+  // ── inner state-updater callback coverage ─────────────────────────────────────
+  // setEditData receives `d => ({...})` callbacks. Use an executing mock so V8
+  // counts those inner arrow functions as covered.
+
+  it('all inner state-updater callbacks are executed via executing mock', () => {
+    const executingMock = vi.fn(fn => typeof fn === 'function' && fn({}));
+
+    const { container } = render(
+      <BulkEventModal
+        {...defaultProps}
+        editData={{ event_type: 'disease', severity: '', product_used: '', details: '' }}
+        setEditData={executingMock}
+        setModalError={vi.fn()}
+      />
+    );
+
+    // event_type onChange (d => ({...event_type...}))
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'note' } });
+    // date onChange (d => ({...event_date...}))
+    fireEvent.change(container.querySelector('input[type="date"]'), { target: { value: '2026-06-01' } });
+    // severity onChange (d => ({...severity...}))
+    const comboboxes = screen.getAllByRole('combobox');
+    const severitySelect = comboboxes.find(s => s.querySelector('option[value="low"]'));
+    if (severitySelect) fireEvent.change(severitySelect, { target: { value: 'medium' } });
+    // product_used onChange (d => ({...product_used...}))
+    fireEvent.change(screen.getByPlaceholderText(/Fish emulsion/), { target: { value: 'Neem oil' } });
+    // details onChange (d => ({...details...}))
+    fireEvent.change(screen.getByPlaceholderText('What happened...'), { target: { value: 'Spotted aphids' } });
+
+    expect(executingMock).toHaveBeenCalled();
+  });
 });

@@ -153,3 +153,50 @@ When using Docker (sandbox):
 - `grid_cell` — a cell in a bed grid assigned to a planting.
 - `planting_event` — a logged observation, task, or milestone on a planting.
 - `photo` — an image attached to a planting.
+
+---
+
+## SDLC Process
+
+Every feature follows these steps in order:
+
+1. **Develop** — implement the feature (backend + frontend changes)
+2. **Backend tests** — add/update pytest tests so backend coverage stays at or above baseline
+3. **Frontend tests** — add/update Vitest tests so frontend coverage stays at or above baseline
+4. **Coverage gate** — run both coverage reports and compare against baselines (see below)
+5. **Sandbox deploy** — build and deploy to the sandbox container at port 8086
+6. **Manual gate** — verify the feature works correctly at http://localhost:8086 (user approval required)
+7. **Promote to prod** — rebuild and restart the production container at port 8085
+8. **Backup** — snapshot production data if schema changed
+9. **Git commit** — commit all changes with a descriptive message
+
+---
+
+## Coverage Gate
+
+### Baselines (do not decrease without explicit user approval)
+
+| Layer | Metric | Minimum |
+|-------|--------|---------|
+| Backend | Statement coverage | 95% |
+| Frontend | Statement coverage | 99% |
+| Frontend | Branch coverage | 90% |
+| Frontend | Line coverage | 100% |
+
+### How to check
+
+```bash
+# Backend
+cd backend && uv run pytest tests/ --cov=app --cov-report=term-missing -q
+
+# Frontend
+cd frontend && PATH="/opt/homebrew/opt/node@20/bin:$PATH" npm run test:coverage
+```
+
+### Rules
+
+- **Every new feature must include adequate tests** — Claude predicts coverage impact before finishing and writes the necessary tests as part of the feature work, not as an afterthought.
+- **If coverage would decrease**, Claude must stop, explain which metrics would drop and by how much, and ask the user for explicit approval before proceeding.
+- **User approval is required** any time the coverage gate cannot be met (e.g., dead code that cannot be reached, external service calls that cannot be mocked). Claude must document the specific uncoverable lines and get sign-off.
+- **Executing mocks for React state-updater callbacks** — `setEditData(d => ({...}))` inner functions are never called by a plain `vi.fn()`. Use `vi.fn(fn => typeof fn === 'function' && fn({}))` to cover those inner callbacks.
+- **Branch coverage pitfalls** — V8 tracks both sides of `||`, `??`, and `? :` operators. Always add a test for the falsy/null/empty branch of every conditional expression introduced in new code.

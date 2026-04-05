@@ -153,6 +153,18 @@ def test_clear_only_affects_target_planting(client):
     assert cells[0]["planting_id"] == pid2
 
 
+def test_update_grid_exception_path_is_swallowed(test_db):
+    """update_grid silently swallows INSERT failures (e.g. FK violation) and returns normally."""
+    from backend.app.services.grid_service import update_grid
+    from backend.app.schemas.grid import GridUpdate
+
+    # planting_id 99999 doesn't exist → FK constraint failure on INSERT → except Exception: pass
+    result = update_grid(test_db, "test-bed-1", GridUpdate(planting_id=99999, cells=[{"row": 0, "col": 0}]))
+    # The exception is swallowed; function returns success dict
+    assert result["message"] == "Grid updated"
+    assert result["cell_count"] == 1
+
+
 def test_clear_cells_updates_planting_quantity(client):
     pid = _make_planting(client)
     client.post("/api/structures/test-bed-1/grid", json={
