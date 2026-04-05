@@ -90,6 +90,20 @@ export default function BulkEventModal({
           <textarea className="form-input" value={editData.details || ''} onChange={e => setEditData(d => ({ ...d, details: e.target.value }))} placeholder={editData.event_type === 'note' ? "What's on your mind…" : "What happened..."} />
         </div>
 
+        <div className="form-group">
+          <label className="form-label">Attach Photo <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11 }}>(optional — one copy stored, linked to all plantings)</span></label>
+          <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', marginBottom: 6 }}>
+            📷 Choose Photo
+            <input type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={e => setEditData(d => ({ ...d, _photos: e.target.files[0] ? [e.target.files[0]] : [] }))} />
+          </label>
+          {editData._photos?.length > 0 && (
+            <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>
+              ✓ {editData._photos[0].name}
+            </div>
+          )}
+        </div>
+
         <div className="modal-actions">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={onSubmit}>

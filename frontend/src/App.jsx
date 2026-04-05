@@ -463,15 +463,40 @@ export default function App() {
     if (selectedPlantingIds.size === 0) return;
     if (!editData.event_type) { setModalError('Please select an event type.'); return; }
     const today = new Date().toISOString().split('T')[0];
+    const photoDate = editData.event_date || today;
     const payload = {
       planting_ids: Array.from(selectedPlantingIds),
-      event_date: editData.event_date || today,
+      event_date: photoDate,
       event_type: editData.event_type,
     };
     if (editData.details) payload.details = editData.details;
     if (editData.severity) payload.severity = editData.severity;
     if (editData.product_used) payload.product_used = editData.product_used;
-    await api.post('/api/events/bulk', payload);
+    const res = await api.post('/api/events/bulk', payload);
+    // Upload photo once, then link the same file to every remaining planting/event
+    const attachedPhoto = (editData._photos || []).find(f => f instanceof File);
+    if (attachedPhoto && res?.pairs?.length > 0) {
+      const [first, ...rest] = res.pairs;
+      // Upload the actual file for the first planting
+      const formData = new FormData();
+      formData.append('file', attachedPhoto);
+      formData.append('taken_date', photoDate);
+      formData.append('caption', '');
+      formData.append('event_id', String(first.event_id));
+      const uploaded = await api.upload(`/api/plantings/${first.planting_id}/photos`, formData);
+      // Link the same filename (no extra disk write) for the remaining plantings
+      if (uploaded?.filename) {
+        for (const pair of rest) {
+          const linkData = new FormData();
+          linkData.append('filename', uploaded.filename);
+          linkData.append('original_name', attachedPhoto.name);
+          linkData.append('planting_id', String(pair.planting_id));
+          linkData.append('event_id', String(pair.event_id));
+          linkData.append('taken_date', photoDate);
+          await api.upload('/api/photos/link', linkData);
+        }
+      }
+    }
     setShowModal(null);
     setEditData({});
     setBulkSelectMode(false);

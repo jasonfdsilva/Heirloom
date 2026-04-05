@@ -125,9 +125,40 @@ describe('BulkEventModal', () => {
     expect(screen.getByText('Product Used')).toBeInTheDocument();
   });
 
-  it('does not show photo attachment UI', () => {
+  it('shows photo attachment UI', () => {
     const { container } = render(<BulkEventModal {...defaultProps} />);
-    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
+  });
+
+  it('shows "Attach Photo" label', () => {
+    render(<BulkEventModal {...defaultProps} />);
+    expect(screen.getByText('Attach Photo')).toBeInTheDocument();
+  });
+
+  it('shows selected photo filename after file is chosen', () => {
+    const file = new File(['img'], 'garden.jpg', { type: 'image/jpeg' });
+    const executingMock = vi.fn(fn => typeof fn === 'function' && fn({ _photos: [] }));
+    render(<BulkEventModal {...defaultProps} setEditData={executingMock} />);
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    expect(executingMock).toHaveBeenCalled();
+  });
+
+  it('shows confirmation text when _photos has an entry', () => {
+    const file = new File(['img'], 'tomato.jpg', { type: 'image/jpeg' });
+    render(<BulkEventModal {...defaultProps} editData={{ _photos: [file] }} />);
+    expect(screen.getByText('✓ tomato.jpg')).toBeInTheDocument();
+  });
+
+  it('empty file input sets _photos to empty array via inner callback', () => {
+    let captured;
+    const executingMock = vi.fn(fn => {
+      if (typeof fn === 'function') captured = fn({ _photos: [new File(['x'], 'old.jpg')] });
+    });
+    render(<BulkEventModal {...defaultProps} setEditData={executingMock} />);
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [] } });
+    expect(captured._photos).toEqual([]);
   });
 
   it('clicking overlay calls onClose', () => {

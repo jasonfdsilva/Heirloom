@@ -52,12 +52,39 @@ def upload_photo(
     return {"id": cursor.lastrowid, "filename": filename, "message": "Photo uploaded"}
 
 
+def link_photo(
+    db: sqlite3.Connection,
+    filename: str,
+    original_name: str,
+    planting_id: int,
+    event_id: int | None = None,
+    caption: str = "",
+    taken_date: str = "",
+) -> dict:
+    """Create a DB record pointing to an already-uploaded file (no disk I/O)."""
+    if not taken_date:
+        taken_date = datetime.utcnow().strftime("%Y-%m-%d")
+    cursor = db.execute(
+        """INSERT INTO photos (planting_id, filename, original_name, caption, taken_date, event_id)
+           VALUES (?,?,?,?,?,?)""",
+        (planting_id, filename, original_name, caption, taken_date, event_id)
+    )
+    db.commit()
+    return {"id": cursor.lastrowid, "filename": filename, "message": "Photo linked"}
+
+
 def delete_photo(db: sqlite3.Connection, photo_id: int) -> dict:
     photo = db.execute("SELECT filename FROM photos WHERE id = ?", (photo_id,)).fetchone()
     if photo:
-        filepath = os.path.join(PHOTOS_DIR, photo["filename"])
-        if os.path.exists(filepath):
-            os.remove(filepath)
+        # Only delete the physical file if no other records share the same filename
+        other = db.execute(
+            "SELECT COUNT(*) FROM photos WHERE filename = ? AND id != ?",
+            (photo["filename"], photo_id)
+        ).fetchone()[0]
+        if other == 0:
+            filepath = os.path.join(PHOTOS_DIR, photo["filename"])
+            if os.path.exists(filepath):
+                os.remove(filepath)
         db.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
         db.commit()
     return {"message": "Photo deleted"}

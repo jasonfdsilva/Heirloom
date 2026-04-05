@@ -1,4 +1,5 @@
 import sqlite3
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 
@@ -34,6 +35,22 @@ async def upload_photo(
     return photo_service.upload_photo(
         db, planting_id, file.filename or "", content, caption, taken_date, event_id
     )
+
+
+@router.post("/api/photos/link")
+def link_photo(
+    filename: str = Form(...),
+    original_name: str = Form(""),
+    planting_id: int = Form(...),
+    event_id: Optional[int] = Form(None),
+    caption: str = Form(""),
+    taken_date: str = Form(""),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    existing = db.execute("SELECT id FROM plantings WHERE id = ?", (planting_id,)).fetchone()
+    if not existing:
+        raise HTTPException(404, "Planting not found")
+    return photo_service.link_photo(db, filename, original_name, planting_id, event_id, caption, taken_date)
 
 
 @router.delete("/api/photos/{photo_id}")
