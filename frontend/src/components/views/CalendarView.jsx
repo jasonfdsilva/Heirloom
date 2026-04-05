@@ -50,10 +50,15 @@ export default function CalendarView({ plantings, onPlantingClick }) {
 
           <div style={{ position: 'relative' }}>
             {(() => {
+              // Sort by seed_name then method so same-variety rows are always adjacent.
+              const sorted = [...plantings].sort((a, b) =>
+                a.seed_name.localeCompare(b.seed_name) || (a.method || 'indoors').localeCompare(b.method || 'indoors')
+              );
+
               // Detect varieties that have plantings with more than one distinct method —
               // those rows need a method badge so the two rows are distinguishable.
               const methodsBySeedName = {};
-              plantings.forEach(p => {
+              sorted.forEach(p => {
                 const m = p.method || 'indoors';
                 if (!methodsBySeedName[p.seed_name]) methodsBySeedName[p.seed_name] = new Set();
                 methodsBySeedName[p.seed_name].add(m);
@@ -70,7 +75,7 @@ export default function CalendarView({ plantings, onPlantingClick }) {
                 nursery: { background: '#0891b220', color: '#0e7490' },
               };
 
-              return plantings.map(p => {
+              return sorted.map(p => {
               const bars = [];
               const method = p.method || 'indoors';
               const harvestEnd = p.first_harvest_date || '2026-09-30';
