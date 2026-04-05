@@ -30,6 +30,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             name TEXT NOT NULL,
             variety TEXT,
             category TEXT NOT NULL,
+            common_name TEXT,
             species TEXT,
             days_to_maturity TEXT,
             germ_rate REAL,

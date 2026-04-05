@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import api from '../../lib/api';
 import { catColor } from '../../lib/colors';
+import ThumbPreview from '../common/ThumbPreview';
 
 export default function Seeds({
   seeds,
@@ -14,6 +15,7 @@ export default function Seeds({
   onDeleteLot,
 }) {
   const [groupBy, setGroupBy] = useState('category'); // 'category' | 'year'
+  const [suggestingName, setSuggestingName] = useState(false);
   const [showLotCode, setShowLotCode] = useState(
     () => localStorage.getItem('heirloom_seeds_showLotCode') === 'true'
   );
@@ -46,6 +48,7 @@ export default function Seeds({
       _seedId: seed.id,
       _seedName: seed.name,
       _seedCategory: seed.category,
+      _seedCommonName: seed.common_name || '',
       _seedSpecies: seed.species || '',
       _seedDays: seed.days_to_maturity || '',
       _seedOrganic: !!seed.organic,
@@ -64,11 +67,21 @@ export default function Seeds({
     setShowModal('edit-seed');
   };
 
+  const handleSuggestCommonName = async () => {
+    setSuggestingName(true);
+    try {
+      const res = await api.get(`/api/seeds/${editData._seedId}/suggest-common-name`);
+      if (res.common_name) setEditData(d => ({ ...d, _seedCommonName: res.common_name }));
+    } catch (_) {}
+    setSuggestingName(false);
+  };
+
   const handleSaveSeed = async () => {
     const cat = editData._seedCategory === '_custom' ? editData._seedCategoryText : editData._seedCategory;
     await api.put(`/api/seeds/${editData._seedId}`, {
       name: editData._seedName,
       category: cat,
+      common_name: editData._seedCommonName || null,
       species: editData._seedSpecies || null,
       days_to_maturity: editData._seedDays || null,
       organic: editData._seedOrganic,
@@ -173,13 +186,14 @@ export default function Seeds({
               </button>
             )}
             {!seedLots.length && <span style={{ width: 14 }} />}
-            {s.image_url ? (
-              <img src={s.image_url} alt={s.name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
-            ) : (
-              <div style={{ width: 28, height: 28, borderRadius: 4, background: color, opacity: 0.3, flexShrink: 0 }} />
-            )}
-            <span style={{ fontWeight: 500 }}>{s.name}</span>
-            {s.organic ? <span className="badge badge-organic" style={{ marginLeft: 2 }}>OG</span> : null}
+            <ThumbPreview url={s.image_url} alt={s.name} color={color} />
+            <div>
+              <span style={{ fontWeight: 500 }}>{s.name}</span>
+              {s.organic ? <span className="badge badge-organic" style={{ marginLeft: 4 }}>OG</span> : null}
+              {s.common_name && groupBy === 'year' && (
+                <div style={{ fontSize: 11, color: '#8a8580', marginTop: 1 }}>{s.common_name}</div>
+              )}
+            </div>
           </div>
         </td>
         {/* Year */}
@@ -219,7 +233,7 @@ export default function Seeds({
     ];
   };
 
-  // ── Group by Category ──────────────────────────────────────────────────────
+  // ── Group by Category (with common_name sub-groups) ───────────────────────
   const renderByCategory = () => {
     const byCategory = {};
     seeds.forEach(s => {
@@ -250,7 +264,47 @@ export default function Seeds({
         </tr>
       );
       if (isCatCollapsed) return [categoryRow];
-      return [categoryRow, ...catSeeds.flatMap(s => renderSeedRow(s, color))];
+
+      // Sub-group by common_name if any seeds in this category have one set
+      const hasAnyCommonName = catSeeds.some(s => s.common_name);
+      if (!hasAnyCommonName) {
+        return [categoryRow, ...catSeeds.flatMap(s => renderSeedRow(s, color))];
+      }
+
+      const byCommonName = {};
+      catSeeds.forEach(s => {
+        const cn = s.common_name || '__other__';
+        if (!byCommonName[cn]) byCommonName[cn] = [];
+        byCommonName[cn].push(s);
+      });
+      const sortedCns = Object.keys(byCommonName).filter(k => k !== '__other__').sort();
+      const unlabeled = byCommonName['__other__'] || [];
+
+      const subRows = [];
+      sortedCns.forEach(cn => {
+        subRows.push(
+          <tr key={`cn-${cat}-${cn}`} style={{ background: color + '09' }}>
+            <td colSpan={COL_COUNT} style={{ padding: '5px 12px 3px 28px', borderBottom: `1px solid ${color}22` }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{cn}</span>
+              <span style={{ fontSize: 11, color: '#aaa', marginLeft: 6 }}>{byCommonName[cn].length} {byCommonName[cn].length === 1 ? 'variety' : 'varieties'}</span>
+            </td>
+          </tr>
+        );
+        byCommonName[cn].forEach(s => subRows.push(...renderSeedRow(s, color)));
+      });
+      if (unlabeled.length) {
+        if (sortedCns.length > 0) {
+          subRows.push(
+            <tr key={`cn-${cat}-unlabeled`} style={{ background: color + '09' }}>
+              <td colSpan={COL_COUNT} style={{ padding: '5px 12px 3px 28px', borderBottom: `1px solid ${color}22` }}>
+                <span style={{ fontSize: 11, color: '#bbb', fontStyle: 'italic' }}>unlabeled</span>
+              </td>
+            </tr>
+          );
+        }
+        unlabeled.forEach(s => subRows.push(...renderSeedRow(s, color)));
+      }
+      return [categoryRow, ...subRows];
     });
   };
 
@@ -362,6 +416,21 @@ export default function Seeds({
                 placeholder={editData._seedName ? editData._seedName.split(' ')[0].slice(0, 8) : 'e.g. Shishito'}
               />
             </div>
+            <div className="form-group">
+              <label className="form-label">Common Name <span style={{ fontSize: 11, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(plant type — used for grouping &amp; image search)</span></label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="text" className="form-input" style={{ flex: 1 }}
+                  value={editData._seedCommonName || ''}
+                  onChange={e => setEditData(d => ({ ...d, _seedCommonName: e.target.value }))}
+                  placeholder="e.g. Kale, Spinach, Romaine Lettuce, Onion, Cilantro"
+                />
+                <button type="button" className="btn btn-secondary btn-sm"
+                  disabled={suggestingName} onClick={handleSuggestCommonName}
+                  title="Ask Claude to suggest a common name" style={{ flexShrink: 0 }}>
+                  {suggestingName ? '…' : '✨ Suggest'}
+                </button>
+              </div>
+            </div>
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Name</label>
@@ -437,7 +506,12 @@ export default function Seeds({
                 <div style={{ flex: 1 }}>
                   <button className="btn btn-secondary btn-sm" disabled={editData._seedImageLoading} onClick={async () => {
                     setEditData(d => ({ ...d, _seedImageLoading: true }));
-                    const res = await api.get(`/api/seeds/image-search?q=${encodeURIComponent(editData._seedName || '')}`);
+                    const params = new URLSearchParams({ q: editData._seedName || '' });
+                    if (editData._seedCommonName) params.set('common_name', editData._seedCommonName);
+                    if (editData._seedSpecies) params.set('species', editData._seedSpecies);
+                    const cat = editData._seedCategory === '_custom' ? editData._seedCategoryText : editData._seedCategory;
+                    if (cat) params.set('category', cat);
+                    const res = await api.get(`/api/seeds/image-search?${params.toString()}`);
                     setEditData(d => ({ ...d, _seedImageUrl: res.image_url || d._seedImageUrl, _seedImageLoading: false }));
                   }}>
                     {editData._seedImageLoading ? 'Searching...' : '🔍 Find Image'}

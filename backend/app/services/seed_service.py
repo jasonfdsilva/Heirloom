@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sqlite3
 import urllib.parse
 import urllib.request
@@ -31,12 +32,12 @@ def create_seed(db: sqlite3.Connection, data: SeedCreate) -> dict:
         existing = db.execute("SELECT id FROM seeds WHERE id = ?", (seed_id,)).fetchone()
         suffix += 1
     db.execute(
-        """INSERT INTO seeds (id, name, variety, category, species, days_to_maturity,
+        """INSERT INTO seeds (id, name, variety, category, common_name, species, days_to_maturity,
            germ_rate, lot, sku, organic, supplier, min_seeds, start_indoors, direct_sow,
            suggested_indoor_weeks, spacing_inches, image_url, short_label)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (seed_id, data.name, data.variety or data.name, data.category, data.species,
-         data.days_to_maturity, data.germ_rate, data.lot, data.sku,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (seed_id, data.name, data.variety or data.name, data.category, data.common_name,
+         data.species, data.days_to_maturity, data.germ_rate, data.lot, data.sku,
          1 if data.organic else 0, data.supplier, data.min_seeds,
          1 if data.start_indoors else 0, 1 if data.direct_sow else 0,
          data.suggested_indoor_weeks, data.spacing_inches, data.image_url, data.short_label)
@@ -47,12 +48,12 @@ def create_seed(db: sqlite3.Connection, data: SeedCreate) -> dict:
 
 def update_seed(db: sqlite3.Connection, seed_id: str, data: SeedCreate) -> dict:
     db.execute(
-        """UPDATE seeds SET name=?, variety=?, category=?, species=?, days_to_maturity=?,
-           germ_rate=?, lot=?, sku=?, organic=?, supplier=?, min_seeds=?,
+        """UPDATE seeds SET name=?, variety=?, category=?, common_name=?, species=?,
+           days_to_maturity=?, germ_rate=?, lot=?, sku=?, organic=?, supplier=?, min_seeds=?,
            start_indoors=?, direct_sow=?, suggested_indoor_weeks=?, spacing_inches=?,
            image_url=?, short_label=?, notes=?
            WHERE id=?""",
-        (data.name, data.variety or data.name, data.category, data.species,
+        (data.name, data.variety or data.name, data.category, data.common_name, data.species,
          data.days_to_maturity, data.germ_rate, data.lot, data.sku,
          1 if data.organic else 0, data.supplier, data.min_seeds,
          1 if data.start_indoors else 0, 1 if data.direct_sow else 0,
@@ -67,6 +68,42 @@ def patch_seed_label(db: sqlite3.Connection, seed_id: str, short_label: Optional
     db.execute("UPDATE seeds SET short_label=? WHERE id=?", (short_label, seed_id))
     db.commit()
     return {"message": "Label updated"}
+
+
+def _johnnys_image(query: str) -> Optional[str]:  # pragma: no cover
+    """Search Johnny's Seeds and return the first product image URL found."""
+    try:
+        encoded = urllib.parse.quote(query)
+        url = f"https://www.johnnyseeds.com/search?q={encoded}"
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+        # Johnny's uses Salesforce Commerce Cloud — product images served from their CDN.
+        # Match both src= and data-src= (lazy-loaded) image URLs from their catalog.
+        candidates = re.findall(
+            r'(?:src|data-src)=["\']'
+            r'(https://www\.johnnyseeds\.com/dw/image/v2/[^"\'?\s]+\.(?:jpg|jpeg|png|webp))'
+            r'[^"\']*["\']',
+            html
+        )
+        # Filter out tiny swatches / icons (URLs often include "/small/" or "swatch")
+        product_imgs = [
+            c for c in candidates
+            if not any(x in c.lower() for x in ("/swatch", "/icon", "/logo", "/badge"))
+        ]
+        if product_imgs:
+            # Prefer higher-res by replacing size suffix if present
+            img = product_imgs[0]
+            img = re.sub(r'sw=\d+', 'sw=400', img)
+            img = re.sub(r'sh=\d+', 'sh=400', img)
+            return img
+    except Exception:
+        pass
+    return None
 
 
 def _wikipedia_image(query: str) -> Optional[str]:  # pragma: no cover
@@ -86,32 +123,121 @@ def _wikipedia_image(query: str) -> Optional[str]:  # pragma: no cover
     return None
 
 
-def search_image(query: str) -> dict:  # pragma: no cover
-    url = _wikipedia_image(query)
+def search_image(
+    query: str,
+    common_name: Optional[str] = None,
+    species: Optional[str] = None,
+    category: Optional[str] = None,
+) -> dict:  # pragma: no cover
+    """Search for a seed image using the full waterfall: Johnny's → Wikipedia."""
+    url = None
+
+    # ── Tier 1: Johnny's Seeds ────────────────────────────────────────────
+    url = _johnnys_image(query)
+    if not url and common_name and common_name != query:
+        url = _johnnys_image(common_name)
+    if not url and species:
+        url = _johnnys_image(species)
+    if not url and category:
+        url = _johnnys_image(category)
+
+    # ── Tier 2: Wikipedia ─────────────────────────────────────────────────
+    if not url and common_name:
+        url = _wikipedia_image(common_name)
+    if not url:
+        url = _wikipedia_image(query)
     if not url:
         simplified = query.replace(" OG", "").replace(" F1", "").replace(" Mix", "").strip()
         if simplified != query:
             url = _wikipedia_image(simplified)
+    if not url and category:
+        fallback = CATEGORY_FALLBACKS.get(category, category)
+        url = _wikipedia_image(fallback)
+
     return {"image_url": url}
 
 
 def fetch_all_images(db: sqlite3.Connection) -> dict:  # pragma: no cover
+    """Re-fetch images for all seeds using the full waterfall: Johnny's Seeds → Wikipedia.
+
+    Rules:
+    - Seeds with a user-uploaded image (/photos/...) are NEVER touched.
+    - Seeds with a Wikipedia/Wikimedia image are always re-fetched (they may have improved
+      with a common_name set since the last run).
+    - Seeds with no image are fetched for the first time.
+
+    Returns updated count and a list of seed names whose image actually changed.
+    """
     seeds = db.execute(
-        "SELECT id, name, variety, category FROM seeds WHERE image_url IS NULL OR image_url = ''"
+        """SELECT id, name, variety, category, common_name, species, image_url
+           FROM seeds
+           WHERE image_url IS NULL
+              OR image_url = ''
+              OR (image_url NOT LIKE '/photos/%'
+                  AND (image_url LIKE '%wikipedia%' OR image_url LIKE '%wikimedia%'
+                       OR image_url LIKE '%johnnyseeds%'))"""
     ).fetchall()
+
     updated = 0
+    changes = []
     for seed in seeds:
-        url = _wikipedia_image(seed["name"])
-        if not url and seed["variety"] and seed["variety"] != seed["name"]:
-            url = _wikipedia_image(seed["variety"])
+        name = seed["name"]
+        common = seed["common_name"]
+        category = seed["category"]
+        species = seed["species"]
+        variety = seed["variety"]
+        old_url = seed["image_url"] or ""
+
+        url = None
+
+        # ── Tier 1: Johnny's Seeds ─────────────────────────────────────────
+        url = _johnnys_image(name)
+        if not url and common and common != name:
+            url = _johnnys_image(common)
+        if not url and species:
+            url = _johnnys_image(species)
         if not url:
-            fallback = CATEGORY_FALLBACKS.get(seed["category"], seed["category"])
+            url = _johnnys_image(category)
+
+        # ── Tier 2: Wikipedia ──────────────────────────────────────────────
+        if not url and common:
+            url = _wikipedia_image(common)
+        if not url:
+            url = _wikipedia_image(name)
+        if not url and variety and variety != name:
+            url = _wikipedia_image(variety)
+        if not url:
+            fallback = CATEGORY_FALLBACKS.get(category, category)
             url = _wikipedia_image(fallback)
-        if url:
+
+        if url and url != old_url:
             db.execute("UPDATE seeds SET image_url = ? WHERE id = ?", (url, seed["id"]))
             updated += 1
+            changes.append({"name": name, "common_name": common})
+
     db.commit()
-    return {"updated": updated, "total": len(seeds)}
+    return {"updated": updated, "total": len(seeds), "changes": changes}
+
+
+def suggest_common_name(name: str, category: str, species: Optional[str] = None) -> Optional[str]:  # pragma: no cover
+    try:
+        import anthropic
+        client = anthropic.Anthropic()
+        species_hint = f"\nSpecies: {species}" if species else ""
+        prompt = (
+            f"What is the common English plant name for this seed variety?\n"
+            f"Variety: {name}\nCategory: {category}{species_hint}\n\n"
+            f"Reply with ONLY the common name, 1-3 words maximum. "
+            f"Examples: Kale, Cherry Tomato, Bell Pepper, Spinach, Romaine Lettuce, Cilantro, Onion."
+        )
+        msg = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=20,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return msg.content[0].text.strip()
+    except Exception:
+        return None
 
 
 def upload_seed_image(db: sqlite3.Connection, seed_id: str, filename_hint: str, content: bytes) -> dict:  # pragma: no cover

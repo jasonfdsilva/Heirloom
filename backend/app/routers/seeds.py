@@ -20,13 +20,27 @@ def create_seed(data: SeedCreate, db: sqlite3.Connection = Depends(get_db)):
 
 
 @router.get("/image-search")
-def seed_image_search(q: str):
-    return seed_service.search_image(q)
+def seed_image_search(
+    q: str,
+    common_name: str = None,
+    species: str = None,
+    category: str = None,
+):
+    return seed_service.search_image(q, common_name=common_name, species=species, category=category)
 
 
 @router.post("/fetch-images")
 def fetch_all_images(db: sqlite3.Connection = Depends(get_db)):
     return seed_service.fetch_all_images(db)
+
+
+@router.get("/{seed_id}/suggest-common-name")
+def suggest_common_name(seed_id: str, db: sqlite3.Connection = Depends(get_db)):
+    seed = db.execute("SELECT name, category, species FROM seeds WHERE id = ?", (seed_id,)).fetchone()
+    if not seed:
+        raise HTTPException(404, "Seed not found")
+    result = seed_service.suggest_common_name(seed["name"], seed["category"], seed["species"])
+    return {"common_name": result}
 
 
 @router.put("/{seed_id}")

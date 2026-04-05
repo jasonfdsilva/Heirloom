@@ -18,6 +18,7 @@ class SeedCreate(BaseModel):
     direct_sow: bool = False
     suggested_indoor_weeks: int = 0
     spacing_inches: int = 12
+    common_name: Optional[str] = None
     image_url: Optional[str] = None
     short_label: Optional[str] = None
     notes: Optional[str] = None

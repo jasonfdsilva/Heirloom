@@ -144,3 +144,73 @@ def test_patch_seed_image_url(client):
     seeds = client.get("/api/seeds").json()
     lettuce = next(s for s in seeds if s["id"] == "test-lettuce")
     assert lettuce["image_url"] == url
+
+
+def test_create_seed_with_common_name(client):
+    payload = {
+        "name": "Winterbor F1",
+        "category": "Brassicas",
+        "common_name": "Kale",
+        "species": "Brassica oleracea",
+        "organic": False,
+        "start_indoors": True,
+        "direct_sow": False,
+        "suggested_indoor_weeks": 6,
+        "spacing_inches": 18,
+    }
+    r = client.post("/api/seeds", json=payload)
+    assert r.status_code == 200
+    seed_id = r.json()["id"]
+
+    seeds = client.get("/api/seeds").json()
+    seed = next(s for s in seeds if s["id"] == seed_id)
+    assert seed["common_name"] == "Kale"
+
+
+def test_update_seed_common_name(client):
+    r = client.put(
+        "/api/seeds/test-lettuce",
+        json={
+            "name": "Buttercrunch Lettuce",
+            "category": "Greens",
+            "common_name": "Butterhead Lettuce",
+            "organic": True,
+            "start_indoors": False,
+            "direct_sow": True,
+            "suggested_indoor_weeks": 0,
+            "spacing_inches": 12,
+        },
+    )
+    assert r.status_code == 200
+
+    seeds = client.get("/api/seeds").json()
+    lettuce = next(s for s in seeds if s["id"] == "test-lettuce")
+    assert lettuce["common_name"] == "Butterhead Lettuce"
+
+
+def test_suggest_common_name_mocked(client, monkeypatch):
+    class FakeContent:
+        text = "Kale"
+
+    class FakeMessage:
+        content = [FakeContent()]
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            return FakeMessage()
+
+    class FakeClient:
+        messages = FakeMessages()
+
+    import backend.app.services.seed_service as svc
+    monkeypatch.setattr(svc, "suggest_common_name",
+                        lambda name, category, species=None: "Kale")
+
+    r = client.get("/api/seeds/test-lettuce/suggest-common-name")
+    assert r.status_code == 200
+    assert r.json()["common_name"] == "Kale"
+
+
+def test_suggest_common_name_not_found(client):
+    r = client.get("/api/seeds/does-not-exist/suggest-common-name")
+    assert r.status_code == 404

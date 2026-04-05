@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { catColor } from '../../lib/colors';
 
 export default function GardenMap({
@@ -19,6 +19,7 @@ export default function GardenMap({
   openPlantPanel,
 }) {
   const mapSvgRef = useRef(null);
+  const [hoveredImg, setHoveredImg] = useState(null);
 
   const W = 680, H = 880;
   const PX_PER_FT = 26;
@@ -132,6 +133,8 @@ export default function GardenMap({
                 return (
                   <g key={`${c.row}-${c.col}`}
                     onDoubleClick={e => { e.stopPropagation(); if (c.plant_guid) openPlantPanel(c.plant_guid); }}
+                    onMouseEnter={e => { if (info?.imgUrl) setHoveredImg({ url: info.imgUrl, x: e.clientX + 14, y: e.clientY }); }}
+                    onMouseLeave={() => setHoveredImg(null)}
                     style={{ cursor: c.plant_guid ? 'pointer' : 'default' }}>
                     {info?.imgUrl ? (
                       <>
@@ -351,6 +354,22 @@ export default function GardenMap({
         </g>
 
       </svg>
+      {hoveredImg && (
+        <div style={{
+          position: 'fixed',
+          top: hoveredImg.y,
+          left: hoveredImg.x,
+          transform: 'translateY(-50%)',
+          zIndex: 9999,
+          background: '#fff',
+          borderRadius: 10,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          padding: 4,
+          pointerEvents: 'none',
+        }}>
+          <img src={hoveredImg.url} alt="" style={{ width: 180, height: 180, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ from backend.app.schemas.planting import PlantingCreate, PlantingUpdate, FamilyN
 
 def list_plantings(db: sqlite3.Connection, year: int = 2026) -> list:
     rows = db.execute("""
-        SELECT p.*, s.name as seed_name, s.category, s.days_to_maturity,
+        SELECT p.*, s.name as seed_name, s.category, s.common_name, s.days_to_maturity,
                s.organic, s.variety, st.name as structure_name
         FROM plantings p
         JOIN seeds s ON p.seed_id = s.id

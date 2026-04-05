@@ -26,7 +26,7 @@ export default function Nav({ view, setView, onFetchImages, onExport, onImport }
         ))}
       </div>
       <div className="nav-right">
-        <button className="nav-btn" onClick={onFetchImages}>🌿 Fetch Plant Images</button>
+        <button className="nav-btn" onClick={onFetchImages} title="Fetch/re-fetch images for all plants (Johnny's → Wikipedia). Never overwrites user-uploaded photos.">🌿 Fetch Images</button>
         <button className="nav-btn" onClick={onExport}>Export JSON</button>
         <button className="nav-btn" onClick={onImport}>Import</button>
       </div>

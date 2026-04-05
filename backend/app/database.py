@@ -70,6 +70,7 @@ def init_db() -> None:  # pragma: no cover
             name TEXT NOT NULL,
             variety TEXT,
             category TEXT NOT NULL,
+            common_name TEXT,
             species TEXT,
             days_to_maturity TEXT,
             germ_rate REAL,
@@ -239,6 +240,8 @@ def migrate_db() -> None:  # pragma: no cover
         conn.execute("ALTER TABLE seeds ADD COLUMN image_url TEXT")
     if "short_label" not in seed_cols:
         conn.execute("ALTER TABLE seeds ADD COLUMN short_label TEXT")
+    if "common_name" not in seed_cols:
+        conn.execute("ALTER TABLE seeds ADD COLUMN common_name TEXT")
 
     lp_cols = [row[1] for row in conn.execute("PRAGMA table_info(label_positions)").fetchall()]
     if "orientation" not in lp_cols:

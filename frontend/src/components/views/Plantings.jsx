@@ -5,6 +5,7 @@ import { catColor, plantStatusColor } from '../../lib/colors';
 import { formatDate } from '../../lib/formatters';
 import { deriveStatus } from '../../lib/plantingStatus';
 import EmptyState from '../common/EmptyState';
+import ThumbPreview from '../common/ThumbPreview';
 
 export default function Plantings({
   plantings, seeds, structures, mapGridCells,
@@ -19,7 +20,7 @@ export default function Plantings({
 }) {
   const varietySummary = Object.values(
     plantings.reduce((acc, p) => {
-      if (!acc[p.seed_id]) acc[p.seed_id] = { name: p.seed_name, category: p.category, rows: 0, started: 0, planted: 0, statusMap: {} };
+      if (!acc[p.seed_id]) acc[p.seed_id] = { name: p.seed_name, category: p.category, common_name: p.common_name || null, rows: 0, started: 0, planted: 0, statusMap: {} };
       acc[p.seed_id].rows += 1;
       acc[p.seed_id].started += p.qty_started || 0;
       acc[p.seed_id].planted += p.qty_planted || 0;
@@ -67,7 +68,7 @@ export default function Plantings({
           <h1 className="page-title">Plantings</h1>
           <p className="page-sub">2026 Season</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="btn btn-secondary" onClick={() => setShowPlantingSummary(s => !s)}>
             {showPlantingSummary ? 'Hide Summary' : 'Show Summary'}
           </button>
@@ -107,30 +108,67 @@ export default function Plantings({
                 {Object.entries(byCategory).map(([cat, varieties]) => {
                   const catStarted = varieties.reduce((s, v) => s + v.started, 0);
                   const catPlanted = varieties.reduce((s, v) => s + v.planted, 0);
+                  const color = catColor(cat);
+                  const hasAnyCommonName = varieties.some(v => v.common_name);
+
+                  // Build common_name sub-groups if any are set
+                  const cnGroups = {};
+                  varieties.forEach(v => {
+                    const cn = v.common_name || '__other__';
+                    if (!cnGroups[cn]) cnGroups[cn] = [];
+                    cnGroups[cn].push(v);
+                  });
+                  const sortedCns = Object.keys(cnGroups).filter(k => k !== '__other__').sort();
+                  const unlabeled = cnGroups['__other__'] || [];
+
+                  const renderVarietyRow = (v) => (
+                    <tr key={v.name}>
+                      <td style={{ fontWeight: 500, paddingLeft: 24 }}>{v.name}</td>
+                      <td style={{ textAlign: 'right' }}>{v.started || '—'}</td>
+                      <td style={{ textAlign: 'right' }}>{v.planted || '—'}</td>
+                      <td>
+                        {Object.values(v.statusMap).map(s => (
+                          <span key={s.label} style={{
+                            display: 'inline-block', padding: '1px 7px', borderRadius: 10,
+                            background: s.color + '22', color: s.color,
+                            fontSize: 11, marginRight: 3, fontWeight: 600, whiteSpace: 'nowrap'
+                          }}>{s.emoji} {s.label}</span>
+                        ))}
+                      </td>
+                    </tr>
+                  );
+
                   return (
                     <React.Fragment key={cat}>
-                      <tr style={{ background: catColor(cat) + '18' }}>
-                        <td colSpan={4} style={{ fontWeight: 700, fontSize: 12, color: catColor(cat), textTransform: 'uppercase', letterSpacing: '0.05em', padding: '6px 12px' }}>
-                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: catColor(cat), marginRight: 6 }} />
+                      <tr style={{ background: color + '18' }}>
+                        <td colSpan={4} style={{ fontWeight: 700, fontSize: 12, color, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '6px 12px' }}>
+                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color, marginRight: 6 }} />
                           {cat} — {catStarted} started, {catPlanted} planted
                         </td>
                       </tr>
-                      {varieties.map(v => (
-                        <tr key={v.name}>
-                          <td style={{ fontWeight: 500, paddingLeft: 24 }}>{v.name}</td>
-                          <td style={{ textAlign: 'right' }}>{v.started || '—'}</td>
-                          <td style={{ textAlign: 'right' }}>{v.planted || '—'}</td>
-                          <td>
-                            {Object.values(v.statusMap).map(s => (
-                              <span key={s.label} style={{
-                                display: 'inline-block', padding: '1px 7px', borderRadius: 10,
-                                background: s.color + '22', color: s.color,
-                                fontSize: 11, marginRight: 3, fontWeight: 600, whiteSpace: 'nowrap'
-                              }}>{s.emoji} {s.label}</span>
-                            ))}
-                          </td>
-                        </tr>
-                      ))}
+                      {!hasAnyCommonName
+                        ? varieties.map(renderVarietyRow)
+                        : [
+                            ...sortedCns.flatMap(cn => [
+                              <tr key={`sum-cn-${cat}-${cn}`} style={{ background: color + '09' }}>
+                                <td colSpan={4} style={{ padding: '3px 12px 2px 20px', borderBottom: `1px solid ${color}22` }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{cn}</span>
+                                </td>
+                              </tr>,
+                              ...cnGroups[cn].map(renderVarietyRow),
+                            ]),
+                            ...(unlabeled.length ? [
+                              ...(sortedCns.length > 0 ? [
+                                <tr key={`sum-cn-${cat}-unlabeled`} style={{ background: color + '09' }}>
+                                  <td colSpan={4} style={{ padding: '3px 12px 2px 20px', borderBottom: `1px solid ${color}22` }}>
+                                    <span style={{ fontSize: 11, color: '#bbb', fontStyle: 'italic' }}>unlabeled</span>
+                                  </td>
+                                </tr>
+                              ] : []),
+                              ...unlabeled.map(renderVarietyRow),
+                            ] : []),
+                          ]
+                      }
                     </React.Fragment>
                   );
                 })}
@@ -275,11 +313,7 @@ export default function Plantings({
                                     {members.length > 0 ? (isExpanded ? '▼' : '▶') : ' '}
                                   </button>
                                 )}
-                                {!isSubRow && (seed?.image_url ? (
-                                  <img src={seed.image_url} alt={p.seed_name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
-                                ) : (
-                                  <div style={{ width: 28, height: 28, borderRadius: 4, background: catColor(p.category), opacity: 0.35, flexShrink: 0 }} />
-                                ))}
+                                {!isSubRow && <ThumbPreview url={seed?.image_url} alt={p.seed_name} color={catColor(p.category)} opacity={0.35} />}
                                 <div>
                                   <div style={{ fontWeight: isSubRow ? 400 : 500, fontSize: 13 }}>
                                     {isSubRow
@@ -424,14 +458,10 @@ export default function Plantings({
                               <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 11, color, flexShrink: 0, lineHeight: 1 }}>
                                 {isGroupExpanded ? '▼' : '▶'}
                               </button>
-                              {seed?.image_url ? (
-                                <img src={seed.image_url} alt={groupPlantings[0].seed_name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid #e8e4dd' }} onError={e => { e.target.style.display = 'none'; }} />
-                              ) : (
-                                <div style={{ width: 28, height: 28, borderRadius: 4, background: color, opacity: 0.35, flexShrink: 0 }} />
-                              )}
+                              <ThumbPreview url={seed?.image_url} alt={groupPlantings[0].seed_name} color={color} opacity={0.35} />
                               <div>
                                 <div style={{ fontWeight: 500, fontSize: 13 }}>{groupPlantings[0].seed_name}</div>
-                                <div style={{ fontSize: 11, color }}>
+                                  <div style={{ fontSize: 11, color }}>
                                   {groupPlantings.length} plantings
                                 </div>
                               </div>
@@ -459,7 +489,91 @@ export default function Plantings({
                       return [groupHeaderRow, ...subRows];
                     });
 
-                    return [categoryRow, ...plantingRows];
+                    // Sub-group plantingRows by common_name if any planting in this cat has one
+                    const hasAnyCommonName = catPlantings.some(p => p.common_name);
+                    if (!hasAnyCommonName || bulkSelectMode) {
+                      return [categoryRow, ...plantingRows];
+                    }
+
+                    // Build seed_id → common_name map from this category's plantings
+                    const cnBySeed = {};
+                    catPlantings.forEach(p => { cnBySeed[p.seed_id] = p.common_name || '__other__'; });
+
+                    // Assign each rendered group (may be 1 or more rows) to a common_name bucket
+                    const cnBuckets = {};
+                    seedGroups.forEach(([seedId, groupPlantings]) => {
+                      const cn = cnBySeed[seedId] || '__other__';
+                      if (!cnBuckets[cn]) cnBuckets[cn] = [];
+                      // Find the rendered rows for this seedId in plantingRows
+                      // (they were added by the flatMap above in the same order as seedGroups)
+                    });
+
+                    // Simpler: re-build grouping from seedGroups directly with cn sub-headers
+                    const sortedCns = [...new Set(
+                      seedGroups.map(([sid]) => cnBySeed[sid] || '__other__').filter(cn => cn !== '__other__')
+                    )].sort();
+                    const unlabeledSeedIds = seedGroups.filter(([sid]) => !cnBySeed[sid] || cnBySeed[sid] === '__other__').map(([sid]) => sid);
+
+                    const subGrouped = [];
+                    sortedCns.forEach(cn => {
+                      subGrouped.push(
+                        <tr key={`cn-${cat}-${cn}`} style={{ background: color + '09' }}>
+                          <td colSpan={bulkSelectMode ? 9 : 9} style={{ padding: '4px 12px 3px 28px', borderBottom: `1px solid ${color}22` }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{cn}</span>
+                          </td>
+                        </tr>
+                      );
+                      seedGroups
+                        .filter(([sid]) => cnBySeed[sid] === cn)
+                        .forEach(([seedId, groupPlantings]) => {
+                          if (groupPlantings.length === 1 || bulkSelectMode) {
+                            groupPlantings.forEach(p => subGrouped.push(renderPlantingRow(p, false)));
+                          } else {
+                            const groupKey = `${cat}-${seedId}`;
+                            const isGroupExpanded2 = expandedVarietyGroups.has(groupKey);
+                            const seed = seeds.find(s => s.id === seedId);
+                            const totalStarted2 = groupPlantings.reduce((s, p) => s + (p.qty_started || 0), 0);
+                            const totalPlanted2 = groupPlantings.reduce((s, p) => s + (p.qty_planted || 0), 0);
+                            const derivedStatusObjs2 = Object.values(groupPlantings.reduce((m, p) => { const ds = deriveStatus(p); m[ds.label] = ds; return m; }, {}));
+                            subGrouped.push(
+                              <tr key={`group2-${groupKey}`} style={{ background: color + '10', cursor: 'pointer' }} onClick={() => toggleVarietyGroup(groupKey)}>
+                                <td style={{ paddingLeft: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 11, color, flexShrink: 0, lineHeight: 1 }}>{isGroupExpanded2 ? '▼' : '▶'}</button>
+                                    <ThumbPreview url={seed?.image_url} alt={groupPlantings[0].seed_name} color={color} opacity={0.35} />
+                                    <div>
+                                      <div style={{ fontWeight: 500, fontSize: 13 }}>{groupPlantings[0].seed_name}</div>
+                                      <div style={{ fontSize: 11, color }}>{groupPlantings.length} plantings</div>
+                                    </div>
+                                    {groupPlantings[0].organic ? <span className="badge badge-organic" style={{ marginLeft: 4 }}>OG</span> : null}
+                                  </div>
+                                </td>
+                                <td><span style={{ color: '#ccc', fontSize: 13 }}>—</span></td>
+                                <td style={{ fontSize: 13, fontWeight: 600 }}>{totalStarted2 || '—'}</td>
+                                <td style={{ fontSize: 13, fontWeight: 600 }}>{totalPlanted2 || '—'}</td>
+                                <td>{derivedStatusObjs2.map(s => <span key={s.label} style={{ display: 'inline-block', padding: '1px 7px', borderRadius: 10, background: s.color + '22', color: s.color, fontSize: 11, marginRight: 3, fontWeight: 600, whiteSpace: 'nowrap' }}>{s.emoji} {s.label}</span>)}</td>
+                                <td colSpan={3}></td><td></td>
+                              </tr>
+                            );
+                            if (isGroupExpanded2) groupPlantings.forEach(p => subGrouped.push(renderPlantingRow(p, true)));
+                          }
+                        });
+                    });
+                    if (unlabeledSeedIds.length) {
+                      if (sortedCns.length > 0) {
+                        subGrouped.push(
+                          <tr key={`cn-${cat}-unlabeled`} style={{ background: color + '09' }}>
+                            <td colSpan={bulkSelectMode ? 9 : 9} style={{ padding: '4px 12px 3px 28px', borderBottom: `1px solid ${color}22` }}>
+                              <span style={{ fontSize: 11, color: '#bbb', fontStyle: 'italic' }}>unlabeled</span>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      seedGroups.filter(([sid]) => unlabeledSeedIds.includes(sid)).forEach(([seedId, groupPlantings]) => {
+                        groupPlantings.forEach(p => subGrouped.push(renderPlantingRow(p, false)));
+                      });
+                    }
+                    return [categoryRow, ...subGrouped];
                   });
                 })()}
               </tbody>

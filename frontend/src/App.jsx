@@ -666,8 +666,12 @@ export default function App() {
           view={view}
           setView={setView}
           onFetchImages={async () => {
+            if (!window.confirm('Fetch/re-fetch images for all plants using the full waterfall (Johnny\'s Seeds → Wikipedia)?\n\nUser-uploaded photos will never be overwritten. This may take a minute.')) return;
             const res = await api.post('/api/seeds/fetch-images', {});
-            alert(`Fetched images for ${res.updated} of ${res.total} plants.`);
+            const changeList = res.changes && res.changes.length
+              ? '\n\nUpdated:\n' + res.changes.map(c => `  • ${c.name}${c.common_name ? ` (${c.common_name})` : ''}`).join('\n')
+              : '';
+            alert(`Updated images for ${res.updated} of ${res.total} seeds checked.${changeList}`);
             loadData();
           }}
           onExport={handleExport}
