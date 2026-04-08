@@ -267,3 +267,168 @@ def test_bulk_event_returns_pairs(client):
     for pair in data["pairs"]:
         assert "event_id" in pair
         assert pair["event_id"] is not None
+
+
+def test_upload_photo_too_large_rejected(client, tmp_path, monkeypatch):
+    """Uploads exceeding MAX_PHOTO_BYTES must be rejected with 413."""
+    import backend.app.services.photo_service as ps
+    monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))
+    monkeypatch.setattr(ps, "MAX_PHOTO_BYTES", 100)  # set tiny limit for test
+
+    pid = _create_planting(client)
+    big_content = b"x" * 101
+    r = client.post(
+        f"/api/plantings/{pid}/photos",
+        files={"file": ("big.jpg", io.BytesIO(big_content), "image/jpeg")},
+        data={"caption": "", "taken_date": "", "event_id": ""},
+    )
+    assert r.status_code == 413
+
+
+def test_upload_photo_unknown_extension_normalised_to_jpg(client, tmp_path, monkeypatch):
+    """Uploads with unknown extensions are saved with .jpg extension."""
+    import backend.app.services.photo_service as ps
+    monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))
+
+    pid = _create_planting(client)
+    r = client.post(
+        f"/api/plantings/{pid}/photos",
+        files={"file": ("malicious.exe", io.BytesIO(b"data"), "application/octet-stream")},
+        data={"caption": "", "taken_date": "", "event_id": ""},
+    )
+    assert r.status_code == 200
+    assert r.json()["filename"].endswith(".jpg")
+
+
+def test_upload_photo_atomicity_no_db_record_on_file_write_failure(client, monkeypatch):
+    """If the temp file write fails, no DB record should be created (write-first pattern)."""
+    import backend.app.services.photo_service as ps
+    # Point PHOTOS_DIR at a non-existent directory so the temp write fails immediately
+    monkeypatch.setattr(ps, "PHOTOS_DIR", "/nonexistent_dir_xyz_abc")
+
+    pid = _create_planting(client)
+    r = client.post(
+        f"/api/plantings/{pid}/photos",
+        files={"file": ("shot.jpg", io.BytesIO(b"data"), "image/jpeg")},
+        data={"caption": "", "taken_date": "", "event_id": ""},
+    )
+    assert r.status_code == 500
+    # No DB record should exist because the file write failed before the INSERT
+    photos = client.get(f"/api/plantings/{pid}/photos").json()
+    assert len(photos) == 0
+
+
+def test_upload_plant_photo_too_large_rejected(client, tmp_path, monkeypatch):
+    """Plant photo uploads exceeding MAX_PHOTO_BYTES must be rejected with 413."""
+    import backend.app.services.photo_service as ps
+    monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))
+    monkeypatch.setattr(ps, "MAX_PHOTO_BYTES", 100)
+
+    pid = _create_planting(client)
+    r = client.post(
+        f"/api/plants/some-guid-1234/photos",
+        files={"file": ("big.jpg", io.BytesIO(b"x" * 101), "image/jpeg")},
+        data={"planting_id": str(pid), "caption": "", "taken_date": ""},
+    )
+    assert r.status_code == 413
+
+
+def test_upload_plant_photo_atomicity_no_db_record_on_file_write_failure(client, monkeypatch):
+    """If the plant photo temp write fails, no DB record should be created."""
+    import backend.app.services.photo_service as ps
+    monkeypatch.setattr(ps, "PHOTOS_DIR", "/nonexistent_dir_xyz_abc")
+
+    pid = _create_planting(client)
+    r = client.post(
+        f"/api/plants/some-guid-5678/photos",
+        files={"file": ("shot.jpg", io.BytesIO(b"data"), "image/jpeg")},
+        data={"planting_id": str(pid), "caption": "", "taken_date": ""},
+    )
+    assert r.status_code == 500
+    photos = client.get(f"/api/plantings/{pid}/photos").json()
+    assert len(photos) == 0
+
+
+# ── serve_photo path-traversal tests ─────────────────────────────────────────
+
+def test_upload_photo_rename_failure_rolls_back_db_record(client, tmp_path, monkeypatch):
+    """If os.rename fails after DB commit, the compensating DELETE removes the record."""
+    import backend.app.services.photo_service as ps
+    import os
+    monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))
+
+    original_rename = os.rename
+
+    def fail_rename(src, dst):
+        raise OSError("simulated rename failure")
+
+    monkeypatch.setattr(os, "rename", fail_rename)
+
+    pid = _create_planting(client)
+    r = client.post(
+        f"/api/plantings/{pid}/photos",
+        files={"file": ("shot.jpg", io.BytesIO(b"data"), "image/jpeg")},
+        data={"caption": "", "taken_date": "", "event_id": ""},
+    )
+    assert r.status_code == 500
+    # Compensating DELETE should have removed the DB record
+    photos = client.get(f"/api/plantings/{pid}/photos").json()
+    assert len(photos) == 0
+
+
+def test_upload_plant_photo_rename_failure_rolls_back_db_record(client, tmp_path, monkeypatch):
+    """If os.rename fails after DB commit for plant photo, the compensating DELETE removes the record."""
+    import backend.app.services.photo_service as ps
+    import os
+    monkeypatch.setattr(ps, "PHOTOS_DIR", str(tmp_path))
+
+    def fail_rename(src, dst):
+        raise OSError("simulated rename failure")
+
+    monkeypatch.setattr(os, "rename", fail_rename)
+
+    pid = _create_planting(client)
+    r = client.post(
+        f"/api/plants/some-guid-9999/photos",
+        files={"file": ("shot.jpg", io.BytesIO(b"data"), "image/jpeg")},
+        data={"planting_id": str(pid), "caption": "", "taken_date": ""},
+    )
+    assert r.status_code == 500
+    photos = client.get(f"/api/plantings/{pid}/photos").json()
+    assert len(photos) == 0
+
+
+# ── serve_photo path-traversal tests ─────────────────────────────────────────
+
+def test_serve_photo_path_traversal_with_slashes(client):
+    """Filenames containing '/' must return 404."""
+    r = client.get("/photos/../../etc/passwd")
+    assert r.status_code == 404
+
+
+def test_serve_photo_path_traversal_with_backslash(client):
+    """Filenames containing '\\' must return 404."""
+    r = client.get("/photos/..\\etc\\passwd")
+    assert r.status_code == 404
+
+
+def test_serve_photo_missing_file_returns_404(client, tmp_path, monkeypatch):
+    """Requesting a filename that does not exist on disk returns 404."""
+    import backend.app.main as main_module
+    import backend.app.database as db_module
+    monkeypatch.setattr(db_module, "PHOTOS_DIR", str(tmp_path))
+    monkeypatch.setattr(main_module, "PHOTOS_DIR", str(tmp_path))
+    r = client.get("/photos/nonexistent.jpg")
+    assert r.status_code == 404
+
+
+def test_serve_photo_unknown_extension_returns_404(client, tmp_path, monkeypatch):
+    """Requesting a filename with an unrecognised extension returns 404."""
+    import backend.app.main as main_module
+    import backend.app.database as db_module
+    # Create a file with an unsupported extension in tmp_path
+    (tmp_path / "evil.exe").write_bytes(b"exe-content")
+    monkeypatch.setattr(db_module, "PHOTOS_DIR", str(tmp_path))
+    monkeypatch.setattr(main_module, "PHOTOS_DIR", str(tmp_path))
+    r = client.get("/photos/evil.exe")
+    assert r.status_code == 404

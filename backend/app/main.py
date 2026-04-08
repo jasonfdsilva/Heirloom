@@ -2,10 +2,12 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app.database import init_db, migrate_db, PHOTOS_DIR
+from backend.app.services.photo_service import SAFE_MIME_TYPES
 from backend.app.routers import (
     seeds,
     plantings,
@@ -28,6 +30,17 @@ async def lifespan(app: FastAPI):  # pragma: no cover
 
 
 app = FastAPI(title="Heirloom Garden Tracker", lifespan=lifespan)
+
+# ── CORS — restrict to localhost origins only ─────────────────────────────────
+
+app.add_middleware(
+    CORSMiddleware,
+    # Localhost origins only: Vite dev server + prod container + sandbox container
+    allow_origins=["http://localhost:5173", "http://localhost:8085", "http://localhost:8086"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
+    allow_credentials=True,
+)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
@@ -57,7 +70,11 @@ async def serve_photo(filename: str):
         raise HTTPException(404, "Photo not found")
     if not os.path.exists(filepath):
         raise HTTPException(404, "Photo not found")
-    return FileResponse(filepath)
+    ext = os.path.splitext(filename)[1].lower()
+    media_type = SAFE_MIME_TYPES.get(ext)
+    if not media_type:
+        raise HTTPException(404, "Photo not found")
+    return FileResponse(filepath, media_type=media_type)
 
 
 # ── Serve frontend (must be last) ─────────────────────────────────────────────
