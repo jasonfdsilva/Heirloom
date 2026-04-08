@@ -49,7 +49,14 @@ app.include_router(seed_lots.router)
 
 @app.get("/photos/{filename}")
 async def serve_photo(filename: str):
-    filepath = os.path.join(PHOTOS_DIR, filename)
+    # Reject filenames containing path separators before any filesystem access
+    if "/" in filename or "\\" in filename:
+        raise HTTPException(404, "Photo not found")
+    # Normalize to prevent path traversal (e.g. ../../etc/passwd)
+    safe_dir = os.path.realpath(PHOTOS_DIR)
+    filepath = os.path.realpath(os.path.join(PHOTOS_DIR, filename))
+    if not filepath.startswith(safe_dir + os.sep):
+        raise HTTPException(404, "Photo not found")
     if not os.path.exists(filepath):
         raise HTTPException(404, "Photo not found")
     return FileResponse(filepath)
@@ -57,12 +64,24 @@ async def serve_photo(filename: str):
 
 # ── Serve frontend (must be last) ─────────────────────────────────────────────
 
-if os.path.exists("/app/static"):  # pragma: no cover
-    app.mount("/assets", StaticFiles(directory="/app/static/assets"), name="assets")
+STATIC_DIR = "/app/static"
+
+if os.path.exists(STATIC_DIR):  # pragma: no cover
+    app.mount("/assets", StaticFiles(directory=f"{STATIC_DIR}/assets"), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        file_path = f"/app/static/{full_path}"
+        # Empty path → index.html (avoids edge case in realpath comparison)
+        if not full_path:
+            return FileResponse(f"{STATIC_DIR}/index.html")
+        # Reject obvious traversal attempts before filesystem access
+        if full_path.startswith("/") or "\\" in full_path:
+            return FileResponse(f"{STATIC_DIR}/index.html")
+        safe_dir = os.path.realpath(STATIC_DIR)
+        file_path = os.path.realpath(os.path.join(STATIC_DIR, full_path))
+        # Reject paths that escape the static directory
+        if not file_path.startswith(safe_dir + os.sep):
+            return FileResponse(f"{STATIC_DIR}/index.html")
         if os.path.isfile(file_path):
             return FileResponse(file_path)
-        return FileResponse("/app/static/index.html")
+        return FileResponse(f"{STATIC_DIR}/index.html")
