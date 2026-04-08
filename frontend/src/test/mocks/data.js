@@ -32,11 +32,11 @@ export const mockPhotos = [
 
 export const mockEvents = [
   {
-    id: 1, planting_id: 1, event_type: 'germination', event_date: '2026-03-08',
+    id: 1, planting_id: 1, event_type: 'germinated', event_date: '2026-03-08',
     details: 'First true leaves showing', seed_name: 'Sun Gold',
   },
   {
-    id: 2, planting_id: 1, event_type: 'observation', event_date: '2026-03-15',
+    id: 2, planting_id: 1, event_type: 'note', event_date: '2026-03-15',
     details: 'Looking healthy', seed_name: 'Sun Gold',
   },
 ];

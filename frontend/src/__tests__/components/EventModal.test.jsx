@@ -160,16 +160,16 @@ describe('EventModal', () => {
     expect(setEditData).toHaveBeenCalled();
   });
 
-  // ── disease / pest event types ────────────────────────────────────────────────
+  // ── issue event type (severity + product used) ───────────────────────────────
 
-  it('shows severity select for disease event type', () => {
-    render(<EventModal {...defaultProps} editData={{ event_type: 'disease' }} />);
+  it('shows severity select for issue event type', () => {
+    render(<EventModal {...defaultProps} editData={{ event_type: 'issue' }} />);
     expect(screen.getByText('Severity')).toBeInTheDocument();
   });
 
-  it('shows severity select for pest event type', () => {
-    render(<EventModal {...defaultProps} editData={{ event_type: 'pest' }} />);
-    expect(screen.getByText('Severity')).toBeInTheDocument();
+  it('does not show severity select for non-issue event types', () => {
+    render(<EventModal {...defaultProps} editData={{ event_type: 'note' }} />);
+    expect(screen.queryByText('Severity')).not.toBeInTheDocument();
   });
 
   it('calls setEditData when severity changes', () => {
@@ -177,7 +177,7 @@ describe('EventModal', () => {
     render(
       <EventModal
         {...defaultProps}
-        editData={{ event_type: 'disease' }}
+        editData={{ event_type: 'issue' }}
         setEditData={setEditData}
       />
     );
@@ -187,20 +187,15 @@ describe('EventModal', () => {
     expect(setEditData).toHaveBeenCalled();
   });
 
-  // ── fertilize / disease / pest show product_used ──────────────────────────────
+  // ── issue / treatment show product_used ──────────────────────────────────────
 
-  it('shows product used field for fertilize event type', () => {
-    render(<EventModal {...defaultProps} editData={{ event_type: 'fertilize' }} />);
+  it('shows product used field for issue event type', () => {
+    render(<EventModal {...defaultProps} editData={{ event_type: 'issue' }} />);
     expect(screen.getByText('Product Used')).toBeInTheDocument();
   });
 
-  it('shows product used field for disease event type', () => {
-    render(<EventModal {...defaultProps} editData={{ event_type: 'disease' }} />);
-    expect(screen.getByText('Product Used')).toBeInTheDocument();
-  });
-
-  it('shows product used field for pest event type', () => {
-    render(<EventModal {...defaultProps} editData={{ event_type: 'pest' }} />);
+  it('shows product used field for treatment event type', () => {
+    render(<EventModal {...defaultProps} editData={{ event_type: 'treatment' }} />);
     expect(screen.getByText('Product Used')).toBeInTheDocument();
   });
 
@@ -209,7 +204,7 @@ describe('EventModal', () => {
     render(
       <EventModal
         {...defaultProps}
-        editData={{ event_type: 'fertilize' }}
+        editData={{ event_type: 'treatment' }}
         setEditData={setEditData}
       />
     );
@@ -264,14 +259,14 @@ describe('EventModal', () => {
   // setEditData receives `d => ({...})` callbacks — use an executing mock so V8
   // counts those inner functions as covered.
 
-  it('disease fields: date/severity/product_used/details inner callbacks are executed', () => {
+  it('issue fields: date/severity/product_used/details inner callbacks are executed', () => {
     // Executing mock: when called with a function, immediately invoke it
     const executingMock = vi.fn(fn => typeof fn === 'function' && fn({}));
 
     const { container } = render(
       <EventModal
         {...defaultProps}
-        editData={{ event_type: 'disease', product_used: '', severity: '' }}
+        editData={{ event_type: 'issue', product_used: '', severity: '' }}
         setEditData={executingMock}
       />
     );

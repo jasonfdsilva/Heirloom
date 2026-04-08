@@ -13,7 +13,7 @@ def _create_planting(client, seed_id="test-lettuce"):
     return r.json()["id"]
 
 
-def _create_event(client, planting_id, event_type="observation", details="Test note"):
+def _create_event(client, planting_id, event_type="note", details="Test note"):
     r = client.post(
         f"/api/plantings/{planting_id}/events",
         json={
@@ -40,7 +40,7 @@ def test_create_event_planting_not_found(client):
         "/api/plantings/99999/events",
         json={
             "event_date": "2026-03-15",
-            "event_type": "observation",
+            "event_type": "note",
             "details": "test",
             "severity": None,
             "product_used": None,
@@ -69,7 +69,7 @@ def test_update_event(client):
         f"/api/events/{event_id}",
         json={
             "event_date": "2026-03-20",
-            "event_type": "observation",
+            "event_type": "note",
             "details": "Updated details",
             "severity": None,
             "product_used": None,
@@ -101,8 +101,8 @@ def test_delete_event(client):
 def test_multiple_events_ordered(client):
     pid = _create_planting(client)
     _create_event(client, pid, event_type="germinated", details="First")
-    _create_event(client, pid, event_type="observation", details="Second")
-    _create_event(client, pid, event_type="pest", details="Third")
+    _create_event(client, pid, event_type="note", details="Second")
+    _create_event(client, pid, event_type="issue", details="Third")
 
     r = client.get("/api/plantings?year=2026")
     planting = next(p for p in r.json() if p["id"] == pid)
@@ -119,7 +119,7 @@ def test_bulk_event_creates_for_all_plantings(client):
     r = client.post("/api/events/bulk", json={
         "planting_ids": [pid1, pid2, pid3],
         "event_date": "2026-04-01",
-        "event_type": "fertilize",
+        "event_type": "treatment",
         "details": "Fish emulsion",
         "product_used": "Neptune's Harvest",
     })
@@ -133,7 +133,7 @@ def test_bulk_event_creates_for_all_plantings(client):
     for pid in [pid1, pid2, pid3]:
         events = plantings[pid]["events"]
         assert len(events) == 1
-        assert events[0]["event_type"] == "fertilize"
+        assert events[0]["event_type"] == "treatment"
         assert events[0]["product_used"] == "Neptune's Harvest"
 
 

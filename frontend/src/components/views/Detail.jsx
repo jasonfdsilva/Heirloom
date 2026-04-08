@@ -116,7 +116,7 @@ export default function Detail({
     if (s !== null) bars.push({ left: s, width: Math.max(e - s, 2), color: '#16a34a', label: isProj ? '🌿 Growing (projected)' : '🌿 Growing', projected: isProj });
   }
 
-  const germEvents = (p.events || []).filter(e => e.event_type === 'germination').sort((a, b) => a.event_date.localeCompare(b.event_date));
+  const germEvents = (p.events || []).filter(e => e.event_type === 'germinated').sort((a, b) => a.event_date.localeCompare(b.event_date));
   const totalGerm = germEvents.reduce((s, e) => s + (e.quantity || 0), 0);
   const expectedRate = seed?.germ_rate;
   const actualRate = p.qty_started ? Math.round(totalGerm / p.qty_started * 100) : null;
@@ -189,7 +189,7 @@ export default function Detail({
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Germination</h3>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: new Date().toISOString().split('T')[0], event_type: 'germination' }); setShowModal('event'); }}>+ Log</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setEditData({ event_date: new Date().toISOString().split('T')[0], event_type: 'germinated' }); setShowModal('event'); }}>+ Log</button>
           </div>
           <div style={{ display: 'flex', gap: 16, marginBottom: germEvents.length ? 12 : 0 }}>
             <div style={{ flex: 1, padding: '8px 12px', background: '#faf8f5', borderRadius: 8, border: '1px solid #e8e4dd' }}>
@@ -405,7 +405,7 @@ export default function Detail({
                     <div style={{ flex: 1 }}>
                       <div className="timeline-date">{formatDate(ev.event_date)}</div>
                       <div style={{ fontWeight: 500, fontSize: 13 }}>{evType?.label || ev.event_type}</div>
-                      {ev.quantity != null && ev.event_type === 'germination' && <div style={{ fontSize: 11, color: '#8a8580' }}>{ev.quantity} sprouted</div>}
+                      {ev.quantity != null && ev.event_type === 'germinated' && <div style={{ fontSize: 11, color: '#8a8580' }}>{ev.quantity} sprouted</div>}
                       {ev.details && <div className="timeline-detail">{ev.details}</div>}
                       {ev.product_used && <div style={{ fontSize: 11, color: '#8a8580', marginTop: 2 }}>Product: {ev.product_used}</div>}
                       {ev.severity && <div style={{ fontSize: 11, color: ev.severity === 'high' ? '#dc2626' : ev.severity === 'medium' ? '#f59e0b' : '#16a34a', marginTop: 2 }}>Severity: {ev.severity}</div>}

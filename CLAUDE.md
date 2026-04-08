@@ -164,12 +164,14 @@ Every feature follows these steps in order:
 2. **Backend tests** — add/update pytest tests so backend coverage stays at or above baseline
 3. **Frontend tests** — add/update Vitest tests so frontend coverage stays at or above baseline
 4. **Coverage gate** — run both coverage reports and compare against baselines (see below)
-5. **Sandbox deploy** — build and deploy to the sandbox container at port 8086
-6. **Manual gate** — verify the feature works correctly at http://localhost:8086 (user approval required)
-7. **Promote to prod** — rebuild and restart the production container at port 8085
-8. **Backup** — snapshot production data if schema changed
-9. **Git commit** — commit all changes with a descriptive message
-10. **Push to GitHub** — `git push origin main` to sync the remote
+5. **Code review** — spawn a separate review agent to inspect the diff for bugs, security issues, and code quality; this is a **blocker**: present the report to the user, who may request changes before proceeding
+6. **Snapshot prod → sandbox** — run `bash scripts/snapshot-to-dev.sh` so sandbox has real production data
+7. **Sandbox deploy** — build and deploy to the sandbox container at port 8086
+8. **Manual gate** — verify the feature works correctly at http://localhost:8086 (user approval required)
+9. **Promote to prod** — rebuild and restart the production container at port 8085
+10. **Backup** — snapshot production data if schema changed
+11. **Git commit** — commit all changes with a descriptive message
+12. **Push to GitHub** — `git push origin main` to sync the remote
 
 ---
 

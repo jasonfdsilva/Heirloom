@@ -85,10 +85,11 @@ class PlantingEvent(Base):
     planting_id = Column(Integer, ForeignKey("plantings.id"), nullable=False)
     event_date = Column(String, nullable=False)
     event_type = Column(String, nullable=False)
-    # Types: fertilize, disease, pest, prune, water, harvest, observation, weather
+    # Valid types defined in backend/app/schemas/event.py EventType Literal
+    # (must stay in sync with EVENT_TYPES in frontend/src/lib/constants.js)
     details = Column(Text)
-    severity = Column(String)  # for disease/pest: low, medium, high
-    product_used = Column(String)  # for fertilizer/treatment
+    severity = Column(String)  # for issue events: low, medium, high
+    product_used = Column(String)  # for issue/treatment events
     created_at = Column(DateTime, default=datetime.utcnow)
 
     planting = relationship("Planting", back_populates="events")

@@ -115,13 +115,13 @@ describe('BulkEventModal', () => {
     expect(screen.getByPlaceholderText("What's on your mind…")).toBeInTheDocument();
   });
 
-  it('shows severity dropdown when event_type is disease', () => {
-    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'disease' }} />);
+  it('shows severity dropdown when event_type is issue', () => {
+    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'issue' }} />);
     expect(screen.getByText('Severity')).toBeInTheDocument();
   });
 
-  it('shows product_used field when event_type is fertilize', () => {
-    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'fertilize' }} />);
+  it('shows product_used field when event_type is treatment', () => {
+    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'treatment' }} />);
     expect(screen.getByText('Product Used')).toBeInTheDocument();
   });
 
@@ -171,13 +171,13 @@ describe('BulkEventModal', () => {
   it('changing event type calls setEditData', () => {
     const setEditData = vi.fn();
     render(<BulkEventModal {...defaultProps} setEditData={setEditData} />);
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'fertilize' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'treatment' } });
     expect(setEditData).toHaveBeenCalled();
   });
 
   it('changing severity calls setEditData', () => {
     const setEditData = vi.fn();
-    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'disease' }} setEditData={setEditData} />);
+    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'issue' }} setEditData={setEditData} />);
     const selects = screen.getAllByRole('combobox');
     const severitySelect = selects.find(s => s.querySelector('option[value="low"]'));
     fireEvent.change(severitySelect, { target: { value: 'high' } });
@@ -186,14 +186,14 @@ describe('BulkEventModal', () => {
 
   it('changing product_used calls setEditData', () => {
     const setEditData = vi.fn();
-    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'fertilize' }} setEditData={setEditData} />);
+    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'treatment' }} setEditData={setEditData} />);
     const productInput = screen.getByPlaceholderText(/Fish emulsion/);
     fireEvent.change(productInput, { target: { value: 'Neem oil' } });
     expect(setEditData).toHaveBeenCalled();
   });
 
-  it('shows severity and product_used for pest event type', () => {
-    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'pest' }} />);
+  it('shows severity and product_used for issue event type', () => {
+    render(<BulkEventModal {...defaultProps} editData={{ event_type: 'issue' }} />);
     expect(screen.getByText('Severity')).toBeInTheDocument();
     expect(screen.getByText('Product Used')).toBeInTheDocument();
   });
@@ -223,7 +223,7 @@ describe('BulkEventModal', () => {
     const { container } = render(
       <BulkEventModal
         {...defaultProps}
-        editData={{ event_type: 'disease', severity: '', product_used: '', details: '' }}
+        editData={{ event_type: 'issue', severity: '', product_used: '', details: '' }}
         setEditData={executingMock}
         setModalError={vi.fn()}
       />

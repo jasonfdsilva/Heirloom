@@ -13,12 +13,12 @@ def _setup_planting_with_events(client):
     pid = pid_r.json()["id"]
 
     client.post(f"/api/plantings/{pid}/events", json={
-        "event_date": "2026-03-01", "event_type": "germination",
+        "event_date": "2026-03-01", "event_type": "germinated",
         "details": "Seeds sprouted", "severity": None,
         "product_used": None, "quantity": None,
     })
     client.post(f"/api/plantings/{pid}/events", json={
-        "event_date": "2026-03-10", "event_type": "observation",
+        "event_date": "2026-03-10", "event_type": "note",
         "details": "Looking healthy", "severity": None,
         "product_used": None, "quantity": None,
     })
@@ -76,7 +76,7 @@ def test_activity_limited_to_20(client):
     for i in range(25):
         client.post(f"/api/plantings/{pid}/events", json={
             "event_date": f"2026-03-{i+1:02d}" if i < 31 else "2026-03-31",
-            "event_type": "observation",
+            "event_type": "note",
             "details": f"Note {i}",
             "severity": None, "product_used": None, "quantity": None,
         })

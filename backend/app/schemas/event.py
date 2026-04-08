@@ -1,10 +1,16 @@
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel
+
+# Must stay in sync with EVENT_TYPES in frontend/src/lib/constants.js
+EventType = Literal[
+    'note', 'sowed_indoors', 'germinated', 'hardened', 'transplanted',
+    'purchased', 'planted_out', 'harvested', 'issue', 'treatment', 'failed',
+]
 
 
 class EventCreate(BaseModel):
     event_date: str
-    event_type: str = 'note'
+    event_type: EventType = 'note'
     details: Optional[str] = None
     severity: Optional[str] = None
     product_used: Optional[str] = None
@@ -14,7 +20,7 @@ class EventCreate(BaseModel):
 class BulkEventCreate(BaseModel):
     planting_ids: list[int]
     event_date: str
-    event_type: str = 'note'
+    event_type: EventType = 'note'
     details: Optional[str] = None
     severity: Optional[str] = None
     product_used: Optional[str] = None

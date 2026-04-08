@@ -45,7 +45,7 @@ def test_import_rebuilds_from_export(client):
     pid = _seed_planting(client)
     # Add an event
     client.post(f"/api/plantings/{pid}/events", json={
-        "event_date": "2026-03-10", "event_type": "germination",
+        "event_date": "2026-03-10", "event_type": "germinated",
         "details": "Sprouted", "severity": None,
         "product_used": None, "quantity": None,
     })

@@ -66,7 +66,7 @@ export default function BulkEventModal({
           <input type="date" className="form-input" value={editData.event_date || today} onChange={e => setEditData(d => ({ ...d, event_date: e.target.value }))} />
         </div>
 
-        {(editData.event_type === 'disease' || editData.event_type === 'pest') && (
+        {editData.event_type === 'issue' && (
           <div className="form-group">
             <label className="form-label">Severity</label>
             <select className="form-input" value={editData.severity || ''} onChange={e => setEditData(d => ({ ...d, severity: e.target.value }))}>
@@ -78,7 +78,7 @@ export default function BulkEventModal({
           </div>
         )}
 
-        {(editData.event_type === 'fertilize' || editData.event_type === 'disease' || editData.event_type === 'pest') && (
+        {(editData.event_type === 'issue' || editData.event_type === 'treatment') && (
           <div className="form-group">
             <label className="form-label">Product Used</label>
             <input type="text" className="form-input" value={editData.product_used || ''} onChange={e => setEditData(d => ({ ...d, product_used: e.target.value }))} placeholder="e.g., Fish emulsion, Neem oil..." />
