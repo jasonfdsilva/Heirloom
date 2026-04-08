@@ -154,22 +154,30 @@ def test_clear_only_affects_target_planting(client):
 
 
 def test_paint_out_of_bounds_row_rejected(client):
-    """Cells with row >= structure length must be rejected with 400."""
+    """Cells with row beyond the grid must be rejected with 400.
+
+    test-bed-1 is 4×8 ft with 6-inch cells → 8 cols × 16 rows (max row=15).
+    Row 16 is the first out-of-bounds value.
+    """
     pid = _make_planting(client)
     r = client.post("/api/structures/test-bed-1/grid", json={
         "planting_id": pid,
-        "cells": [{"row": 8, "col": 0}],  # test-bed-1 length=8 → max row is 7
+        "cells": [{"row": 16, "col": 0}],  # 8 ft × 12 in/ft ÷ 6 in/cell = 16 rows (0-15)
     })
     assert r.status_code == 400
     assert "out of bounds" in r.json()["detail"].lower()
 
 
 def test_paint_out_of_bounds_col_rejected(client):
-    """Cells with col >= structure width must be rejected with 400."""
+    """Cells with col beyond the grid must be rejected with 400.
+
+    test-bed-1 is 4×8 ft with 6-inch cells → 8 cols × 16 rows (max col=7).
+    Col 8 is the first out-of-bounds value.
+    """
     pid = _make_planting(client)
     r = client.post("/api/structures/test-bed-1/grid", json={
         "planting_id": pid,
-        "cells": [{"row": 0, "col": 4}],  # test-bed-1 width=4 → max col is 3
+        "cells": [{"row": 0, "col": 8}],  # 4 ft × 12 in/ft ÷ 6 in/cell = 8 cols (0-7)
     })
     assert r.status_code == 400
     assert "out of bounds" in r.json()["detail"].lower()

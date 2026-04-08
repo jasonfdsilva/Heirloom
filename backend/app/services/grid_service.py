@@ -30,8 +30,11 @@ def update_grid(db: sqlite3.Connection, structure_id: str, data: GridUpdate) -> 
     if not structure:
         raise HTTPException(status_code=404, detail="Structure not found")
 
-    max_col = int(structure["width"]) - 1
-    max_row = int(structure["length"]) - 1
+    # Grid uses 6-inch cells: a 4-ft-wide structure has 4×12/6 = 8 columns.
+    # Must match the frontend CELL_SIZE = 6 constant in BedPlanner.jsx / GardenMap.jsx.
+    _CELL_INCHES = 6
+    max_col = int(structure["width"] * 12 / _CELL_INCHES) - 1
+    max_row = int(structure["length"] * 12 / _CELL_INCHES) - 1
     for cell in data.cells:
         r, c = cell["row"], cell["col"]
         if r < 0 or r > max_row or c < 0 or c > max_col:
