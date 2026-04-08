@@ -314,3 +314,70 @@ def test_upload_seed_image_success(client, monkeypatch):
     )
     assert r.status_code == 200
     assert r.json()["image_url"] == "/photos/test.jpg"
+
+
+# ── upload_seed_image service-level tests ─────────────────────────────────────
+
+def test_upload_seed_image_too_large_rejected(client, tmp_path, monkeypatch):
+    """Uploads exceeding MAX_PHOTO_BYTES return 413."""
+    import io
+    import backend.app.services.seed_service as svc
+    monkeypatch.setattr(svc, "MAX_PHOTO_BYTES", 100)
+    monkeypatch.setattr(svc, "PHOTOS_DIR", str(tmp_path))
+    r = client.post(
+        "/api/seeds/test-lettuce/image",
+        files={"file": ("big.jpg", io.BytesIO(b"x" * 101), "image/jpeg")},
+    )
+    assert r.status_code == 413
+
+
+def test_upload_seed_image_unknown_extension_normalised_to_jpg(client, tmp_path, monkeypatch):
+    """Unknown file extension is coerced to .jpg."""
+    import io
+    import backend.app.services.seed_service as svc
+    monkeypatch.setattr(svc, "PHOTOS_DIR", str(tmp_path))
+    r = client.post(
+        "/api/seeds/test-lettuce/image",
+        files={"file": ("seed.exe", io.BytesIO(b"data"), "application/octet-stream")},
+    )
+    assert r.status_code == 200
+    saved = list(tmp_path.iterdir())
+    assert len(saved) == 1
+    assert saved[0].suffix == ".jpg"
+
+
+def test_upload_seed_image_atomicity_no_db_update_on_file_write_failure(client, monkeypatch):
+    """If the temp file write fails, the seeds.image_url must not be updated."""
+    import io
+    import backend.app.services.seed_service as svc
+    monkeypatch.setattr(svc, "PHOTOS_DIR", "/nonexistent_dir_xyz_abc")
+    r = client.post(
+        "/api/seeds/test-lettuce/image",
+        files={"file": ("shot.jpg", io.BytesIO(b"data"), "image/jpeg")},
+    )
+    assert r.status_code == 500
+    seeds = client.get("/api/seeds").json()
+    lettuce = next(s for s in seeds if s["id"] == "test-lettuce")
+    assert lettuce["image_url"] is None  # DB must not have been updated
+
+
+def test_upload_seed_image_rename_failure_no_db_update(client, tmp_path, monkeypatch):
+    """If os.rename fails, the DB is never updated (rename-first ordering)."""
+    import io
+    import os
+    import backend.app.services.seed_service as svc
+    monkeypatch.setattr(svc, "PHOTOS_DIR", str(tmp_path))
+
+    def fail_rename(src, dst):
+        raise OSError("simulated rename failure")
+
+    monkeypatch.setattr(os, "rename", fail_rename)
+    r = client.post(
+        "/api/seeds/test-lettuce/image",
+        files={"file": ("photo.jpg", io.BytesIO(b"data"), "image/jpeg")},
+    )
+    assert r.status_code == 500
+    seeds = client.get("/api/seeds").json()
+    lettuce = next(s for s in seeds if s["id"] == "test-lettuce")
+    # With rename-first ordering the DB UPDATE never ran, so image_url stays None
+    assert lettuce["image_url"] is None

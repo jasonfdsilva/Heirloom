@@ -354,3 +354,92 @@ def test_get_lot_found(test_db):
     result = seed_lot_service.get_lot(test_db, row["id"])
     assert result is not None
     assert result["lot_code"] == "SH-2026-001"
+
+
+def test_create_lot_retries_on_code_collision(test_db, monkeypatch):
+    """If generate_lot_code returns a code that already exists (TOCTOU race), create_lot
+    retries and succeeds with the next available code."""
+    # Pre-insert the code that the first generation attempt will return
+    test_db.execute(
+        "INSERT INTO seed_lots (seed_id, lot_code, packed_for_year) VALUES (?,?,?)",
+        ("test-pepper", "SH-2026-001", 2026),
+    )
+    test_db.commit()
+
+    # Patch generate_lot_code: first call returns the already-taken code, second returns next
+    call_count = {"n": 0}
+    original_generate = seed_lot_service.generate_lot_code
+
+    def stubbed_generate(db, seed_id, year):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return "SH-2026-001"  # simulate race — someone else inserted this just before us
+        return original_generate(db, seed_id, year)  # retry reads updated DB → 002
+
+    monkeypatch.setattr(seed_lot_service, "generate_lot_code", stubbed_generate)
+
+    from backend.app.schemas.seed_lot import SeedLotCreate
+    data = SeedLotCreate(seed_id="test-pepper", packed_for_year=2026)
+    result = seed_lot_service.create_lot(test_db, data)
+
+    assert result["lot_code"] == "SH-2026-002"
+    assert call_count["n"] == 2  # confirms it retried exactly once
+
+
+def test_create_lot_duplicate_custom_code_does_not_retry(test_db):
+    """If a user-supplied lot_code already exists, create_lot raises immediately (no retry)."""
+    test_db.execute(
+        "INSERT INTO seed_lots (seed_id, lot_code, packed_for_year) VALUES (?,?,?)",
+        ("test-pepper", "CUSTOM-001", 2026),
+    )
+    test_db.commit()
+
+    from backend.app.schemas.seed_lot import SeedLotCreate
+    import sqlite3 as _sqlite3
+    data = SeedLotCreate(seed_id="test-pepper", lot_code="CUSTOM-001", packed_for_year=2026)
+    with pytest.raises(_sqlite3.IntegrityError):
+        seed_lot_service.create_lot(test_db, data)
+
+
+def test_update_lot_unknown_field_raises(test_db):
+    """update_lot rejects keys not in the allowlist (guard against future schema bypass)."""
+    test_db.execute(
+        "INSERT INTO seed_lots (seed_id, lot_code, packed_for_year) VALUES (?,?,?)",
+        ("test-pepper", "SH-2026-001", 2026),
+    )
+    test_db.commit()
+    row = test_db.execute("SELECT id FROM seed_lots WHERE lot_code = 'SH-2026-001'").fetchone()
+    lot_id = row["id"]
+
+    # Bypass Pydantic validation by using a stub with an injected unknown field
+    class FakeLotUpdate:
+        def model_dump(self, **kwargs):
+            return {"supplier": "Acme", "injected_col": "evil"}
+
+    with pytest.raises(ValueError, match="Unknown field"):
+        seed_lot_service.update_lot(test_db, lot_id, FakeLotUpdate())
+
+
+def test_extract_packet_data_non_json_response_raises_value_error(monkeypatch):
+    """extract_packet_data raises ValueError when Claude returns non-JSON text."""
+    import types
+
+    class FakeContent:
+        text = "Sorry, I cannot read this image."
+
+    class FakeMessage:
+        content = [FakeContent()]
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            return FakeMessage()
+
+    class FakeClient:
+        messages = FakeMessages()
+
+    fake_module = types.ModuleType("anthropic")
+    fake_module.Anthropic = FakeClient
+    monkeypatch.setitem(__import__("sys").modules, "anthropic", fake_module)
+
+    with pytest.raises(ValueError, match="non-JSON"):
+        seed_lot_service.extract_packet_data(b"fake", "image/jpeg")

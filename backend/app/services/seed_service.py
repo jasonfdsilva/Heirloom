@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -7,8 +8,13 @@ import urllib.request
 import uuid
 from typing import Optional
 
+from fastapi import HTTPException
+
 from backend.app.database import PHOTOS_DIR
 from backend.app.schemas.seed import SeedCreate, ImageUrlPatch
+from backend.app.services.photo_service import ALLOWED_EXTENSIONS, MAX_PHOTO_BYTES
+
+logger = logging.getLogger(__name__)
 
 CATEGORY_FALLBACKS = {
     "Tomatoes": "Tomato", "Peppers": "Capsicum", "Herbs": "Herb",
@@ -102,8 +108,8 @@ def _johnnys_image(query: str) -> Optional[str]:  # pragma: no cover
             img = re.sub(r'sw=\d+', 'sw=400', img)
             img = re.sub(r'sh=\d+', 'sh=400', img)
             return img
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Johnny's image search failed for %r: %s", query, exc)
     return None
 
 
@@ -119,8 +125,8 @@ def _wikipedia_image(query: str) -> Optional[str]:  # pragma: no cover
             if src:
                 src = src.replace("/320px-", "/300px-").replace("/220px-", "/300px-")
                 return src
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Wikipedia image search failed for %r: %s", query, exc)
     return None
 
 
@@ -239,19 +245,40 @@ def suggest_common_name(name: str, category: str, species: Optional[str] = None)
             messages=[{"role": "user", "content": prompt}]
         )
         return msg.content[0].text.strip()
-    except Exception:
+    except Exception as exc:
+        logger.warning("suggest_common_name failed for %r: %s", name, exc)
         return None
 
 
-def upload_seed_image(db: sqlite3.Connection, seed_id: str, filename_hint: str, content: bytes) -> dict:  # pragma: no cover
+def upload_seed_image(db: sqlite3.Connection, seed_id: str, filename_hint: str, content: bytes) -> dict:
+    if len(content) > MAX_PHOTO_BYTES:
+        raise HTTPException(413, f"Image exceeds {MAX_PHOTO_BYTES // (1024 * 1024)} MB limit")
     ext = os.path.splitext(filename_hint)[1].lower() if filename_hint else ".jpg"
-    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+    if ext not in ALLOWED_EXTENSIONS:
         ext = ".jpg"
     filename = f"seed_{seed_id}_{uuid.uuid4().hex[:8]}{ext}"
     filepath = os.path.join(PHOTOS_DIR, filename)
-    with open(filepath, "wb") as f:
-        f.write(content)
+    tmp_filepath = filepath + ".tmp"
+    try:
+        with open(tmp_filepath, "wb") as f:
+            f.write(content)
+    except OSError as exc:
+        logger.error("Failed to write temp seed image file %s: %s", tmp_filepath, exc)
+        raise HTTPException(500, "Failed to save image file") from exc
+    # Rename-first ordering: file is moved to its permanent path before the DB
+    # is updated.  This means a process crash after rename but before commit
+    # leaves an orphaned file (recoverable) rather than a committed broken URL
+    # (data corruption).  If rename fails, no DB update is made at all.
     image_url = f"/photos/{filename}"
+    try:
+        os.rename(tmp_filepath, filepath)
+    except OSError as exc:
+        logger.error("Failed to rename temp seed image file %s → %s: %s", tmp_filepath, filepath, exc)
+        try:
+            os.unlink(tmp_filepath)
+        except OSError as unlink_exc:
+            logger.warning("Failed to clean up temp seed image file %s: %s", tmp_filepath, unlink_exc)
+        raise HTTPException(500, "Failed to save image file") from exc
     db.execute("UPDATE seeds SET image_url = ?, image_locked = 1 WHERE id = ?", (image_url, seed_id))
     db.commit()
     return {"image_url": image_url}

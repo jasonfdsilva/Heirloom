@@ -1,10 +1,20 @@
 import base64
 import json
+import logging
 import sqlite3
 from typing import Optional
 
 from backend.app.database import lot_prefix
 from backend.app.schemas.seed_lot import SeedLotCreate, SeedLotUpdate
+
+logger = logging.getLogger(__name__)
+
+# Columns that may be updated via update_lot; guards against accidental or
+# adversarial keys reaching the dynamic SET clause.
+_UPDATABLE_LOT_COLUMNS = frozenset({
+    "lot_code", "packed_for_year", "purchased_year", "supplier", "supplier_lot",
+    "sku", "germ_rate", "notes", "packet_image_url",
+})
 
 
 # ── Lot code generation ───────────────────────────────────────────────────────
@@ -54,22 +64,35 @@ def create_lot(db: sqlite3.Connection, data: SeedLotCreate) -> dict:
     if not seed:
         raise ValueError(f"Seed {data.seed_id!r} not found")
 
-    # Auto-generate lot_code if not supplied
+    # Auto-generate lot_code if not supplied, with retry on UNIQUE collision.
+    # generate_lot_code reads the highest existing code then returns seq+1; two
+    # concurrent requests can race and produce the same code.  On IntegrityError
+    # we re-generate (the conflicting row is now visible) and try again.
     lot_code = data.lot_code
-    if not lot_code:
-        year = data.packed_for_year or 2026
-        lot_code = generate_lot_code(db, data.seed_id, year)
-
-    db.execute(
-        """INSERT INTO seed_lots
-           (seed_id, lot_code, packed_for_year, purchased_year, supplier, supplier_lot,
-            sku, germ_rate, notes, packet_image_url)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (data.seed_id, lot_code, data.packed_for_year, data.purchased_year,
-         data.supplier, data.supplier_lot, data.sku, data.germ_rate,
-         data.notes, data.packet_image_url),
-    )
-    db.commit()
+    year = data.packed_for_year or 2026
+    for attempt in range(3):
+        if not lot_code:
+            lot_code = generate_lot_code(db, data.seed_id, year)
+        try:
+            db.execute(
+                """INSERT INTO seed_lots
+                   (seed_id, lot_code, packed_for_year, purchased_year, supplier, supplier_lot,
+                    sku, germ_rate, notes, packet_image_url)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (data.seed_id, lot_code, data.packed_for_year, data.purchased_year,
+                 data.supplier, data.supplier_lot, data.sku, data.germ_rate,
+                 data.notes, data.packet_image_url),
+            )
+            db.commit()
+            break  # success
+        except sqlite3.IntegrityError:
+            if data.lot_code:
+                # User supplied a custom code that already exists — re-raise immediately
+                raise
+            # Auto-generated code collided; clear it so generate_lot_code runs again
+            lot_code = None
+            if attempt == 2:
+                raise  # give up after 3 attempts
     row = db.execute(
         "SELECT sl.*, s.name AS seed_name, s.category, s.species FROM seed_lots sl JOIN seeds s ON sl.seed_id = s.id WHERE sl.lot_code = ?",
         (lot_code,),
@@ -82,6 +105,9 @@ def update_lot(db: sqlite3.Connection, lot_id: int, data: SeedLotUpdate) -> dict
     if not fields:
         row = db.execute("SELECT * FROM seed_lots WHERE id = ?", (lot_id,)).fetchone()
         return dict(row) if row else {}
+    unknown = set(fields) - _UPDATABLE_LOT_COLUMNS
+    if unknown:
+        raise ValueError(f"Unknown field(s) for seed_lot update: {unknown}")
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [lot_id]
     db.execute(f"UPDATE seed_lots SET {set_clause} WHERE id = ?", values)
@@ -145,4 +171,8 @@ def extract_packet_data(image_bytes: bytes, mime_type: str) -> dict:
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.error("extract_packet_data: Claude returned non-JSON response: %r", text[:200])
+        raise ValueError(f"Claude returned non-JSON response: {exc}") from exc
