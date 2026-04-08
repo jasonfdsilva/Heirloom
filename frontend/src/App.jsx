@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import api from './lib/api';
 import { STATUS_LABELS, EVENT_TYPES, PLANT_STATUSES } from './lib/constants';
 import { catColor, statusColor, plantStatusColor } from './lib/colors';
@@ -286,6 +286,15 @@ export default function App() {
   const [collapsedCategories, setCollapsedCategories] = useState(new Set());
   const [collapsedSeedCategories, setCollapsedSeedCategories] = useState(new Set());
   const [recentActivity, setRecentActivity] = useState([]);
+  const [appError, setAppError] = useState(null);
+  const appErrorTimerRef = useRef(null);
+
+  const showAppError = (err) => {
+    const msg = err?.detail || err?.message || 'Something went wrong. Please try again.';
+    if (appErrorTimerRef.current) clearTimeout(appErrorTimerRef.current);
+    setAppError(msg);
+    appErrorTimerRef.current = setTimeout(() => setAppError(null), 6000);
+  };
 
   const {
     seeds, setSeeds,
@@ -312,7 +321,7 @@ export default function App() {
   useEffect(() => {
     if (view !== 'detail' && view !== 'bed-planner') loadData();
     if (view === 'photos' || view === 'dashboard') loadAllPhotos();
-    if (view === 'dashboard') api.get('/api/dashboard/activity').then(setRecentActivity);
+    if (view === 'dashboard') api.get('/api/dashboard/activity').then(setRecentActivity).catch(err => console.error('activity load error:', err));
   }, [view]);
 
   // Lightbox keyboard navigation
@@ -328,8 +337,12 @@ export default function App() {
   }, [lightboxIndex, plantingPhotos.length]);
 
   const loadPhotos = async (plantingId) => {
-    const photos = await api.get(`/api/plantings/${plantingId}/photos`);
-    setPlantingPhotos(photos);
+    try {
+      const photos = await api.get(`/api/plantings/${plantingId}/photos`);
+      setPlantingPhotos(photos);
+    } catch (err) {
+      console.error('loadPhotos error:', err);
+    }
   };
 
   const openPlantPanel = async (plantGuid) => {
@@ -384,28 +397,45 @@ export default function App() {
   const handleCreatePlanting = async () => {
     const payload = cleanPlantingData(editData);
     if (!payload.seed_id) return;
-    await api.post('/api/plantings', payload);
-    setShowModal(null); setEditData({});
-    loadData();
+    try {
+      await api.post('/api/plantings', payload);
+      setShowModal(null); setEditData({});
+      loadData();
+    } catch (err) {
+      setModalError(err.detail || 'Failed to create planting.');
+    }
   };
 
   const handleUpdatePlanting = async () => {
     if (!selectedPlanting) return;
     const payload = cleanPlantingData(editData);
     delete payload.seed_id; // don't change the seed on edit
-    await api.put(`/api/plantings/${selectedPlanting.id}`, payload);
+    try {
+      await api.put(`/api/plantings/${selectedPlanting.id}`, payload);
+    } catch (err) {
+      setModalError(err.detail || 'Failed to update planting.');
+      return;
+    }
     setShowModal(null); setEditData({});
     loadData();
-    const updated = await api.get('/api/plantings?year=2026');
-    const refreshed = updated.find(p => p.id === selectedPlanting.id);
-    if (refreshed) { setSelectedPlanting(refreshed); }
+    try {
+      const updated = await api.get('/api/plantings?year=2026');
+      const refreshed = updated.find(p => p.id === selectedPlanting.id);
+      if (refreshed) { setSelectedPlanting(refreshed); }
+    } catch (err) {
+      showAppError(err);
+    }
   };
 
   const handleDeletePlanting = async (id) => {
     if (!confirm('Delete this planting?')) return;
-    await api.del(`/api/plantings/${id}`);
-    if (selectedPlanting?.id === id) { setSelectedPlanting(null); setView('plantings'); }
-    loadData();
+    try {
+      await api.del(`/api/plantings/${id}`);
+      if (selectedPlanting?.id === id) { setSelectedPlanting(null); setView('plantings'); }
+      loadData();
+    } catch (err) {
+      showAppError(err);
+    }
   };
 
   const handleDuplicatePlanting = (id) => {
@@ -433,8 +463,7 @@ export default function App() {
         await api.put(`/api/events/${editData.id}`, payload);
       } else {
         const res = await api.post(`/api/plantings/${selectedPlanting.id}/events`, payload);
-        if (!res || res.detail) { setModalError(res?.detail || 'Failed to save event.'); return; }
-        savedEventId = res.id || null;
+        savedEventId = res?.id || null;
       }
       // Upload any photos attached to this event, linked via event_id
       const attachedPhotos = (editData._photos || []).filter(f => f instanceof File);
@@ -454,8 +483,7 @@ export default function App() {
       const refreshed = updated.find(p => p.id === selectedPlanting.id);
       if (refreshed) setSelectedPlanting(refreshed);
     } catch (err) {
-      setModalError('Something went wrong. Please try again.');
-      console.error('handleCreateEvent error:', err);
+      setModalError(err.detail || 'Something went wrong. Please try again.');
     }
   };
 
@@ -472,37 +500,40 @@ export default function App() {
     if (editData.details) payload.details = editData.details;
     if (editData.severity) payload.severity = editData.severity;
     if (editData.product_used) payload.product_used = editData.product_used;
-    const res = await api.post('/api/events/bulk', payload);
-    if (!res || res.detail) { setModalError(res?.detail || 'Failed to save events.'); return; }
-    // Upload photo once, then link the same file to every remaining planting/event
-    const attachedPhoto = (editData._photos || []).find(f => f instanceof File);
-    if (attachedPhoto && res?.pairs?.length > 0) {
-      const [first, ...rest] = res.pairs;
-      // Upload the actual file for the first planting
-      const formData = new FormData();
-      formData.append('file', attachedPhoto);
-      formData.append('taken_date', photoDate);
-      formData.append('caption', '');
-      formData.append('event_id', String(first.event_id));
-      const uploaded = await api.upload(`/api/plantings/${first.planting_id}/photos`, formData);
-      // Link the same filename (no extra disk write) for the remaining plantings
-      if (uploaded?.filename) {
-        for (const pair of rest) {
-          const linkData = new FormData();
-          linkData.append('filename', uploaded.filename);
-          linkData.append('original_name', attachedPhoto.name);
-          linkData.append('planting_id', String(pair.planting_id));
-          linkData.append('event_id', String(pair.event_id));
-          linkData.append('taken_date', photoDate);
-          await api.upload('/api/photos/link', linkData);
+    try {
+      const res = await api.post('/api/events/bulk', payload);
+      // Upload photo once, then link the same file to every remaining planting/event
+      const attachedPhoto = (editData._photos || []).find(f => f instanceof File);
+      if (attachedPhoto && res?.pairs?.length > 0) {
+        const [first, ...rest] = res.pairs;
+        // Upload the actual file for the first planting
+        const formData = new FormData();
+        formData.append('file', attachedPhoto);
+        formData.append('taken_date', photoDate);
+        formData.append('caption', '');
+        formData.append('event_id', String(first.event_id));
+        const uploaded = await api.upload(`/api/plantings/${first.planting_id}/photos`, formData);
+        // Link the same filename (no extra disk write) for the remaining plantings
+        if (uploaded?.filename) {
+          for (const pair of rest) {
+            const linkData = new FormData();
+            linkData.append('filename', uploaded.filename);
+            linkData.append('original_name', attachedPhoto.name);
+            linkData.append('planting_id', String(pair.planting_id));
+            linkData.append('event_id', String(pair.event_id));
+            linkData.append('taken_date', photoDate);
+            await api.upload('/api/photos/link', linkData);
+          }
         }
       }
+      setShowModal(null);
+      setEditData({});
+      setBulkSelectMode(false);
+      setSelectedPlantingIds(new Set());
+      loadData();
+    } catch (err) {
+      setModalError(err.detail || 'Failed to save events.');
     }
-    setShowModal(null);
-    setEditData({});
-    setBulkSelectMode(false);
-    setSelectedPlantingIds(new Set());
-    loadData();
   };
 
   // ── Lot (Seed Packet) Handlers ─────────────────────────────────────────────
@@ -523,46 +554,62 @@ export default function App() {
   };
 
   const handleSubmitLot = async (payload, lotId) => {
-    if (lotId) {
-      await api.put(`/api/seed-lots/${lotId}`, payload);
-    } else {
-      await api.post('/api/seed-lots', payload);
+    try {
+      if (lotId) {
+        await api.put(`/api/seed-lots/${lotId}`, payload);
+      } else {
+        await api.post('/api/seed-lots', payload);
+      }
+      // Always refresh both lots and seeds (seeds may have changed category/species,
+      // or a new variety was just created and needs image fetch)
+      const [updatedLots, updatedSeeds] = await Promise.all([
+        api.get('/api/seed-lots'),
+        api.get('/api/seeds'),
+      ]);
+      setLots(updatedLots);
+      setSeeds(updatedSeeds);
+      setShowModal(null);
+      setEditingLot(null);
+      setAddLotSeedId(null);
+    } catch (err) {
+      setModalError(err.detail || 'Failed to save seed lot.');
     }
-    // Always refresh both lots and seeds (seeds may have changed category/species,
-    // or a new variety was just created and needs image fetch)
-    const [updatedLots, updatedSeeds] = await Promise.all([
-      api.get('/api/seed-lots'),
-      api.get('/api/seeds'),
-    ]);
-    setLots(updatedLots);
-    setSeeds(updatedSeeds);
-    setShowModal(null);
-    setEditingLot(null);
-    setAddLotSeedId(null);
   };
 
   const handleDeleteLot = async (lotId) => {
-    await api.del(`/api/seed-lots/${lotId}`);
-    const updatedLots = await api.get('/api/seed-lots');
-    setLots(updatedLots);
+    try {
+      await api.del(`/api/seed-lots/${lotId}`);
+      const updatedLots = await api.get('/api/seed-lots');
+      setLots(updatedLots);
+    } catch (err) {
+      showAppError(err);
+    }
   };
 
   const handleDeleteEvent = async (eventId) => {
-    await api.del(`/api/events/${eventId}`);
-    loadData();
-    const updated = await api.get('/api/plantings?year=2026');
-    const refreshed = updated.find(p => p.id === selectedPlanting?.id);
-    if (refreshed) setSelectedPlanting(refreshed);
+    try {
+      await api.del(`/api/events/${eventId}`);
+      loadData();
+      const updated = await api.get('/api/plantings?year=2026');
+      const refreshed = updated.find(p => p.id === selectedPlanting?.id);
+      if (refreshed) setSelectedPlanting(refreshed);
+    } catch (err) {
+      showAppError(err);
+    }
   };
 
   const handleDeletePhoto = async (photoId) => {
-    await api.del(`/api/photos/${photoId}`);
-    const newPhotos = plantingPhotos.filter(p => p.id !== photoId);
-    setPlantingPhotos(newPhotos);
-    if (newPhotos.length === 0) {
-      setLightboxIndex(null);
-    } else {
-      setLightboxIndex(prev => Math.min(prev, newPhotos.length - 1));
+    try {
+      await api.del(`/api/photos/${photoId}`);
+      const newPhotos = plantingPhotos.filter(p => p.id !== photoId);
+      setPlantingPhotos(newPhotos);
+      if (newPhotos.length === 0) {
+        setLightboxIndex(null);
+      } else {
+        setLightboxIndex(prev => Math.min(prev, newPhotos.length - 1));
+      }
+    } catch (err) {
+      showAppError(err);
     }
   };
 
@@ -573,26 +620,33 @@ export default function App() {
     const files = form.querySelector('input[type="file"]').files;
     const takenDate = form.querySelector('input[name="taken_date"]').value;
     const caption = form.querySelector('input[name="caption"]').value;
-
-    for (let i = 0; i < files.length; i++) {
-      const formData = new FormData();
-      formData.append('file', files[i]);
-      formData.append('taken_date', takenDate);
-      formData.append('caption', files.length === 1 ? caption : (caption ? `${caption} (${i + 1})` : ''));
-      await api.upload(`/api/plantings/${selectedPlanting.id}/photos`, formData);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append('file', files[i]);
+        formData.append('taken_date', takenDate);
+        formData.append('caption', files.length === 1 ? caption : (caption ? `${caption} (${i + 1})` : ''));
+        await api.upload(`/api/plantings/${selectedPlanting.id}/photos`, formData);
+      }
+      setShowModal(null);
+      loadPhotos(selectedPlanting.id);
+      loadData();
+    } catch (err) {
+      setModalError(err.detail || 'Failed to upload photo.');
     }
-    setShowModal(null);
-    loadPhotos(selectedPlanting.id);
-    loadData();
   };
 
   const handleExport = async () => {
-    const data = await api.get('/api/export');
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `heirloom-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click(); URL.revokeObjectURL(url);
+    try {
+      const data = await api.get('/api/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `heirloom-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch (err) {
+      showAppError(err);
+    }
   };
 
   const handleImport = async () => {
@@ -603,8 +657,12 @@ export default function App() {
       if (!file) return;
       const formData = new FormData();
       formData.append('file', file);
-      await api.upload('/api/import', formData);
-      loadData();
+      try {
+        await api.upload('/api/import', formData);
+        loadData();
+      } catch (err) {
+        showAppError(err);
+      }
     };
     input.click();
   };
@@ -631,53 +689,69 @@ export default function App() {
   // ── Bed Planner callbacks ────────────────────────────────────────────────────
 
   const openBedPlanner = async (structure) => {
-    setSelectedBed(structure);
-    setActivePaintPlanting(null);
-    const cells = await api.get(`/api/structures/${structure.id}/grid`);
-    setGridCells(cells);
-    setView('bed-planner');
+    try {
+      setSelectedBed(structure);
+      setActivePaintPlanting(null);
+      const cells = await api.get(`/api/structures/${structure.id}/grid`);
+      setGridCells(cells);
+      setView('bed-planner');
+    } catch (err) {
+      showAppError(err);
+    }
   };
 
   const handleCellPaint = async (row, col) => {
     if (!activePaintPlanting || !selectedBed) return;
     const existing = gridCells.find(c => c.row === row && c.col === col);
-    if (existing) {
-      // If clicking on a cell that already has the same planting, erase it
-      if (existing.planting_id === activePaintPlanting.id) {
-        await api.del(`/api/structures/${selectedBed.id}/grid/cells?planting_id=${activePaintPlanting.id}&rows=${row}&cols=${col}`);
-        const cells = await api.get(`/api/structures/${selectedBed.id}/grid`);
-        setGridCells(cells);
-        loadData();
-        return;
+    try {
+      if (existing) {
+        // If clicking on a cell that already has the same planting, erase it
+        if (existing.planting_id === activePaintPlanting.id) {
+          await api.del(`/api/structures/${selectedBed.id}/grid/cells?planting_id=${activePaintPlanting.id}&rows=${row}&cols=${col}`);
+          const cells = await api.get(`/api/structures/${selectedBed.id}/grid`);
+          setGridCells(cells);
+          loadData();
+          return;
+        }
       }
+      await api.post(`/api/structures/${selectedBed.id}/grid`, {
+        planting_id: activePaintPlanting.id,
+        cells: [{ row, col }]
+      });
+      const cells = await api.get(`/api/structures/${selectedBed.id}/grid`);
+      setGridCells(cells);
+      loadData();
+    } catch (err) {
+      showAppError(err);
     }
-    await api.post(`/api/structures/${selectedBed.id}/grid`, {
-      planting_id: activePaintPlanting.id,
-      cells: [{ row, col }]
-    });
-    const cells = await api.get(`/api/structures/${selectedBed.id}/grid`);
-    setGridCells(cells);
-    loadData();
   };
 
   const handleCellDrag = async (row, col) => {
     if (!isDragging || !activePaintPlanting || !selectedBed) return;
     const existing = gridCells.find(c => c.row === row && c.col === col);
     if (existing) return; // don't overwrite while dragging
-    await api.post(`/api/structures/${selectedBed.id}/grid`, {
-      planting_id: activePaintPlanting.id,
-      cells: [{ row, col }]
-    });
-    const cells = await api.get(`/api/structures/${selectedBed.id}/grid`);
-    setGridCells(cells);
+    try {
+      await api.post(`/api/structures/${selectedBed.id}/grid`, {
+        planting_id: activePaintPlanting.id,
+        cells: [{ row, col }]
+      });
+      const cells = await api.get(`/api/structures/${selectedBed.id}/grid`);
+      setGridCells(cells);
+    } catch (err) {
+      showAppError(err);
+    }
   };
 
   const handleClearPlanting = async (plantingId) => {
     if (!selectedBed) return;
-    await api.del(`/api/structures/${selectedBed.id}/grid/cells?planting_id=${plantingId}`);
-    const cells = await api.get(`/api/structures/${selectedBed.id}/grid`);
-    setGridCells(cells);
-    loadData();
+    try {
+      await api.del(`/api/structures/${selectedBed.id}/grid/cells?planting_id=${plantingId}`);
+      const cells = await api.get(`/api/structures/${selectedBed.id}/grid`);
+      setGridCells(cells);
+      loadData();
+    } catch (err) {
+      showAppError(err);
+    }
   };
 
   // ── Main render ────────────────────────────────────────────────────────────
@@ -687,18 +761,36 @@ export default function App() {
   return (
     <>
       <style>{styles}</style>
+      {appError && (
+        <div role="alert" style={{
+          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          background: '#dc2626', color: '#fff', padding: '10px 20px',
+          borderRadius: 8, zIndex: 9999, boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
+          maxWidth: '80vw', textAlign: 'center', fontSize: 14,
+        }}>
+          {appError}
+          <button onClick={() => setAppError(null)} style={{
+            marginLeft: 12, background: 'transparent', border: 'none',
+            color: '#fff', cursor: 'pointer', fontSize: 16, lineHeight: 1,
+          }}>×</button>
+        </div>
+      )}
       <div className="app">
         <Nav
           view={view}
           setView={setView}
           onFetchImages={async () => {
             if (!window.confirm('Fetch/re-fetch images for all plants using the full waterfall (Johnny\'s Seeds → Wikipedia)?\n\nUser-uploaded photos will never be overwritten. This may take a minute.')) return;
-            const res = await api.post('/api/seeds/fetch-images', {});
-            const changeList = res.changes && res.changes.length
-              ? '\n\nUpdated:\n' + res.changes.map(c => `  • ${c.name}${c.common_name ? ` (${c.common_name})` : ''}`).join('\n')
-              : '';
-            alert(`Updated images for ${res.updated} of ${res.total} seeds checked.${changeList}`);
-            loadData();
+            try {
+              const res = await api.post('/api/seeds/fetch-images', {});
+              const changeList = res.changes && res.changes.length
+                ? '\n\nUpdated:\n' + res.changes.map(c => `  • ${c.name}${c.common_name ? ` (${c.common_name})` : ''}`).join('\n')
+                : '';
+              alert(`Updated images for ${res.updated} of ${res.total} seeds checked.${changeList}`);
+              loadData();
+            } catch (err) {
+              showAppError(err);
+            }
           }}
           onExport={handleExport}
           onImport={handleImport}

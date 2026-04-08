@@ -320,6 +320,10 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
           );
         })()}
 
+        {modalError && !editData._addingCustom && (
+          <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{modalError}</div>
+        )}
+
         <div className="modal-actions">
           <button className="btn btn-secondary" onClick={() => { onClose(); setModalError(null); }}>Cancel</button>
           <button className="btn btn-primary" onClick={onSubmit}>
