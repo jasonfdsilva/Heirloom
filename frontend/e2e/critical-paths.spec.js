@@ -243,29 +243,5 @@ test.afterAll(async ({ request }) => {
   }
 });
 
-// ── 10. Export produces a JSON download ──────────────────────────────────────
-
-test('export button triggers a JSON download with expected keys', async ({ page }) => {
-  await page.goto('/');
-
-  // Intercept the download
-  const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 10000 }),
-    page.locator('button', { hasText: /Export/i }).first().click(),
-  ]);
-
-  // The download should have a filename and produce a non-empty file
-  const filename = download.suggestedFilename();
-  expect(filename).toBeTruthy();
-
-  // Read the stream and verify it is valid JSON with the expected top-level keys
-  const stream = await download.createReadStream();
-  const chunks = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  const json = JSON.parse(Buffer.concat(chunks).toString());
-
-  expect(json).toHaveProperty('seeds');
-  expect(json).toHaveProperty('plantings');
-  expect(json).toHaveProperty('structures');
-  expect(json).toHaveProperty('exported_at');
-});
+// Export/import feature was intentionally removed in Batch 3.
+// Backups are handled at the DB level via scripts/backup.sh.
