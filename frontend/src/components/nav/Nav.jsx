@@ -14,7 +14,7 @@ function isNavActive(view, navView) {
     || (view === 'bed-planner' && navView === 'map');
 }
 
-export default function Nav({ view, setView, onFetchImages, onExport, onImport }) {
+export default function Nav({ view, setView, onFetchImages }) {
   return (
     <nav className="nav">
       <div className="nav-logo">🌱 Heirloom</div>
@@ -27,8 +27,6 @@ export default function Nav({ view, setView, onFetchImages, onExport, onImport }
       </div>
       <div className="nav-right">
         <button className="nav-btn" onClick={onFetchImages} title="Fetch/re-fetch images for all plants (Johnny's → Wikipedia). Never overwrites user-uploaded photos.">🌿 Fetch Images</button>
-        <button className="nav-btn" onClick={onExport}>Export JSON</button>
-        <button className="nav-btn" onClick={onImport}>Import</button>
       </div>
     </nav>
   );

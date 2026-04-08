@@ -1,8 +1,13 @@
+import logging
 import sqlite3
 import uuid
 
+from fastapi import HTTPException
+
 from backend.app.database import seed_prefix
 from backend.app.schemas.grid import GridUpdate
+
+logger = logging.getLogger(__name__)
 
 
 def get_grid(db: sqlite3.Connection, structure_id: str) -> list:
@@ -19,6 +24,23 @@ def get_grid(db: sqlite3.Connection, structure_id: str) -> list:
 
 
 def update_grid(db: sqlite3.Connection, structure_id: str, data: GridUpdate) -> dict:
+    structure = db.execute(
+        "SELECT width, length FROM structures WHERE id = ?", (structure_id,)
+    ).fetchone()
+    if not structure:
+        raise HTTPException(status_code=404, detail="Structure not found")
+
+    max_col = int(structure["width"]) - 1
+    max_row = int(structure["length"]) - 1
+    for cell in data.cells:
+        r, c = cell["row"], cell["col"]
+        if r < 0 or r > max_row or c < 0 or c > max_col:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cell ({r}, {c}) is out of bounds for this structure "
+                       f"(max row {max_row}, max col {max_col})",
+            )
+
     row_seed = db.execute(
         "SELECT s.name FROM plantings p JOIN seeds s ON p.seed_id = s.id WHERE p.id = ?",
         (data.planting_id,)
@@ -52,8 +74,8 @@ def update_grid(db: sqlite3.Connection, structure_id: str, data: GridUpdate) -> 
                        label_visible=1""",
                 (data.planting_id, structure_id, cell["row"], cell["col"], new_guid, new_short)
             )
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — swallow to keep painter UX smooth
+            logger.warning("grid INSERT failed for cell (%s,%s): %s", cell["row"], cell["col"], exc)
     db.commit()
     return {"message": "Grid updated", "cell_count": len(data.cells)}
 

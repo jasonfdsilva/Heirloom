@@ -636,36 +636,6 @@ export default function App() {
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const data = await api.get('/api/export');
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `heirloom-backup-${new Date().toISOString().split('T')[0]}.json`;
-      a.click(); URL.revokeObjectURL(url);
-    } catch (err) {
-      showAppError(err);
-    }
-  };
-
-  const handleImport = async () => {
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = '.json';
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const formData = new FormData();
-      formData.append('file', file);
-      try {
-        await api.upload('/api/import', formData);
-        loadData();
-      } catch (err) {
-        showAppError(err);
-      }
-    };
-    input.click();
-  };
 
   // ── Computed ──────────────────────────────────────────────────────────────
 
@@ -792,8 +762,6 @@ export default function App() {
               showAppError(err);
             }
           }}
-          onExport={handleExport}
-          onImport={handleImport}
         />
 
         <MobileTabBar view={view} setView={setView} />
@@ -954,7 +922,7 @@ export default function App() {
             modalError={modalError}
             setModalError={setModalError}
             onSubmit={showModal === 'edit-planting' ? handleUpdatePlanting : handleCreatePlanting}
-            onClose={() => setShowModal(null)}
+            onClose={() => { setShowModal(null); setEditData({}); setModalError(null); }}
             isEdit={showModal === 'edit-planting'}
             title={showModal === 'duplicate' ? 'Duplicate Planting' : null}
           />
@@ -967,7 +935,7 @@ export default function App() {
             modalError={modalError}
             setModalError={setModalError}
             onSubmit={handleCreateEvent}
-            onClose={() => setShowModal(null)}
+            onClose={() => { setShowModal(null); setEditData({}); setModalError(null); }}
             selectedPlanting={selectedPlanting}
           />
         )}
@@ -1013,7 +981,7 @@ export default function App() {
             selectedPlanting={selectedPlanting}
             editData={editData}
             setEditData={setEditData}
-            onClose={() => setShowModal(null)}
+            onClose={() => { setShowModal(null); setEditData({}); setModalError(null); }}
             onSave={async () => {
               if (!selectedPlanting || !editData.details?.trim()) return;
               await api.post(`/api/plantings/${selectedPlanting.id}/events`, {

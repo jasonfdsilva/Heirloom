@@ -15,7 +15,6 @@ from backend.app.routers import (
     grid,
     plants,
     dashboard,
-    export,
     label_positions,
     seed_lots,
 )
@@ -40,7 +39,6 @@ app.include_router(structures.router)
 app.include_router(grid.router)
 app.include_router(plants.router)
 app.include_router(dashboard.router)
-app.include_router(export.router)
 app.include_router(label_positions.router)
 app.include_router(seed_lots.router)
 

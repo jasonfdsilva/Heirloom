@@ -153,8 +153,53 @@ def test_clear_only_affects_target_planting(client):
     assert cells[0]["planting_id"] == pid2
 
 
+def test_paint_out_of_bounds_row_rejected(client):
+    """Cells with row >= structure length must be rejected with 400."""
+    pid = _make_planting(client)
+    r = client.post("/api/structures/test-bed-1/grid", json={
+        "planting_id": pid,
+        "cells": [{"row": 8, "col": 0}],  # test-bed-1 length=8 → max row is 7
+    })
+    assert r.status_code == 400
+    assert "out of bounds" in r.json()["detail"].lower()
+
+
+def test_paint_out_of_bounds_col_rejected(client):
+    """Cells with col >= structure width must be rejected with 400."""
+    pid = _make_planting(client)
+    r = client.post("/api/structures/test-bed-1/grid", json={
+        "planting_id": pid,
+        "cells": [{"row": 0, "col": 4}],  # test-bed-1 width=4 → max col is 3
+    })
+    assert r.status_code == 400
+    assert "out of bounds" in r.json()["detail"].lower()
+
+
+def test_paint_negative_row_rejected(client):
+    """Negative row values must be rejected with 400."""
+    pid = _make_planting(client)
+    r = client.post("/api/structures/test-bed-1/grid", json={
+        "planting_id": pid,
+        "cells": [{"row": -1, "col": 0}],
+    })
+    assert r.status_code == 400
+    assert "out of bounds" in r.json()["detail"].lower()
+
+
+def test_paint_nonexistent_structure_returns_404(client):
+    """Painting cells on a structure that doesn't exist returns 404."""
+    pid = _make_planting(client)
+    r = client.post("/api/structures/does-not-exist/grid", json={
+        "planting_id": pid,
+        "cells": [{"row": 0, "col": 0}],
+    })
+    assert r.status_code == 404
+
+
 def test_update_grid_exception_path_is_swallowed(test_db):
-    """update_grid silently swallows INSERT failures (e.g. FK violation) and returns normally."""
+    """update_grid logs but swallows INSERT failures (e.g. FK violation) to keep the painter UX smooth.
+    Known design debt: caller receives success even when a cell was not written.
+    If the silent-swallow is ever removed, update this test accordingly."""
     from backend.app.services.grid_service import update_grid
     from backend.app.schemas.grid import GridUpdate
 
