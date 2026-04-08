@@ -349,15 +349,25 @@ export default function App() {
     if (!plantGuid) return;
     setSelectedPlantGuid(plantGuid);
     setPlantPanelLoading(true);
-    const [detail, harvests, photos] = await Promise.all([
-      api.get(`/api/plants/${plantGuid}`),
-      api.get(`/api/plants/${plantGuid}/harvests`),
-      api.get(`/api/plants/${plantGuid}/photos`),
-    ]);
-    setPlantDetail(detail);
-    setPlantHarvests(harvests);
-    setPlantPhotos(photos);
-    setPlantPanelLoading(false);
+    try {
+      const [detail, harvests, photos] = await Promise.all([
+        api.get(`/api/plants/${plantGuid}`),
+        api.get(`/api/plants/${plantGuid}/harvests`),
+        api.get(`/api/plants/${plantGuid}/photos`),
+      ]);
+      setPlantDetail(detail);
+      setPlantHarvests(harvests);
+      setPlantPhotos(photos);
+    } catch (err) {
+      console.error('openPlantPanel error:', err);
+      // Clear any stale data from a previously opened panel so the UI
+      // never shows another plant's data under this guid.
+      setPlantDetail(null);
+      setPlantHarvests([]);
+      setPlantPhotos([]);
+    } finally {
+      setPlantPanelLoading(false);
+    }
   };
 
   const closePlantPanel = () => {

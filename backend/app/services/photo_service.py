@@ -111,6 +111,8 @@ def link_photo(
     taken_date: str = "",
 ) -> dict:
     """Create a DB record pointing to an already-uploaded file (no disk I/O)."""
+    if not _safe_photo_path(filename):
+        raise HTTPException(400, "Invalid filename: path traversal not allowed")
     if not taken_date:
         taken_date = datetime.utcnow().strftime("%Y-%m-%d")
     cursor = db.execute(
@@ -122,6 +124,32 @@ def link_photo(
     return {"id": cursor.lastrowid, "filename": filename, "message": "Photo linked"}
 
 
+def _safe_photo_path(filename: str) -> "str | None":
+    """Return the absolute path only if it resolves inside PHOTOS_DIR, else None.
+
+    Rejects filenames containing any path separator character — both forward slash
+    and backslash — before joining, then confirms the resolved path stays under
+    PHOTOS_DIR with a realpath check.  Null bytes are also rejected (they would
+    raise ValueError from os.path.realpath on CPython).
+    """
+    # Reject null bytes and path-separator characters.
+    # "/" and "\\" are checked explicitly so the guard works on all OSes and
+    # rejects obviously suspicious filenames even on platforms where "\" is not
+    # the OS path separator (e.g. Mac/Linux).
+    if "\x00" in filename or "/" in filename or "\\" in filename:
+        return None
+    if os.sep in filename or (os.altsep and os.altsep in filename):
+        return None
+    try:
+        candidate = os.path.realpath(os.path.join(PHOTOS_DIR, filename))
+        photos_root = os.path.realpath(PHOTOS_DIR)
+    except (ValueError, OSError):
+        return None
+    if not candidate.startswith(photos_root + os.sep) and candidate != photos_root:
+        return None
+    return candidate
+
+
 def delete_photo(db: sqlite3.Connection, photo_id: int) -> dict:
     photo = db.execute("SELECT filename FROM photos WHERE id = ?", (photo_id,)).fetchone()
     if photo:
@@ -131,9 +159,14 @@ def delete_photo(db: sqlite3.Connection, photo_id: int) -> dict:
             (photo["filename"], photo_id)
         ).fetchone()[0]
         if other == 0:
-            filepath = os.path.join(PHOTOS_DIR, photo["filename"])
-            if os.path.exists(filepath):
+            filepath = _safe_photo_path(photo["filename"])
+            if filepath and os.path.exists(filepath):
                 os.remove(filepath)
+            elif not filepath:
+                logger.warning(
+                    "delete_photo: rejected unsafe filename %r for photo id=%s",
+                    photo["filename"], photo_id,
+                )
         db.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
         db.commit()
     return {"message": "Photo deleted"}

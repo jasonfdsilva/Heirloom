@@ -135,6 +135,7 @@ def init_db() -> None:  # pragma: no cover
             details TEXT,
             severity TEXT,
             product_used TEXT,
+            quantity INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -145,6 +146,7 @@ def init_db() -> None:  # pragma: no cover
             original_name TEXT,
             caption TEXT,
             taken_date TEXT,
+            event_id INTEGER REFERENCES planting_events(id),
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -209,16 +211,6 @@ def init_db() -> None:  # pragma: no cover
                 (st["id"], st["name"], st["type"], st["width"], st["length"],
                  st["map_x"], st["map_y"])
             )
-
-    # Idempotent column migrations
-    try:
-        conn.execute("ALTER TABLE planting_events ADD COLUMN quantity INTEGER")
-    except Exception:
-        pass
-    try:
-        conn.execute("ALTER TABLE photos ADD COLUMN event_id INTEGER REFERENCES planting_events(id)")
-    except Exception:
-        pass
 
     conn.commit()
     conn.close()
@@ -294,10 +286,16 @@ def _m1_up(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE grid_cells ADD COLUMN plant_notes TEXT")
     if "label_visible" not in gc:
         conn.execute("ALTER TABLE grid_cells ADD COLUMN label_visible INTEGER DEFAULT 1")
+    # planting_events
+    pec = _cols(conn, "planting_events")
+    if "quantity" not in pec:
+        conn.execute("ALTER TABLE planting_events ADD COLUMN quantity INTEGER")
     # photos
     phc = _cols(conn, "photos")
     if "plant_guid" not in phc:
         conn.execute("ALTER TABLE photos ADD COLUMN plant_guid TEXT")
+    if "event_id" not in phc:
+        conn.execute("ALTER TABLE photos ADD COLUMN event_id INTEGER REFERENCES planting_events(id)")
     # rename germination → germinated (idempotent)
     conn.execute(
         "UPDATE planting_events SET event_type = 'germinated' WHERE event_type = 'germination'"
@@ -348,7 +346,9 @@ def _m1_down(conn: sqlite3.Connection) -> None:
         _drop_col(conn, "label_positions", col)
     for col in ("plant_guid", "short_id", "plant_status", "plant_notes", "label_visible"):
         _drop_col(conn, "grid_cells", col)
-    _drop_col(conn, "photos", "plant_guid")
+    for col in ("plant_guid", "event_id"):
+        _drop_col(conn, "photos", col)
+    _drop_col(conn, "planting_events", "quantity")
 
 
 class _Migration:
@@ -369,7 +369,8 @@ _MIGRATIONS: list[_Migration] = [
             "purchased_date, planted_out_date), seeds (image_url, short_label, common_name, "
             "image_locked), label_positions (orientation, hidden, label_text), grid_cells "
             "(plant_guid, short_id, plant_status, plant_notes, label_visible), photos "
-            "(plant_guid); rename germination→germinated events; backfill plant_guid"
+            "(plant_guid, event_id), planting_events (quantity); "
+            "rename germination→germinated events; backfill plant_guid"
         ),
         up=_m1_up,
         down=_m1_down,
@@ -397,7 +398,8 @@ def migrate_db() -> None:
     Implementation note: with isolation_level=None (our _migration_conn), Python's
     sqlite3 does not auto-commit before DDL. SQLite treats ALTER TABLE and PRAGMA
     user_version as transactional — both are rolled back on ROLLBACK. PRAGMA
-    user_version is set after COMMIT (not inside the transaction) for clarity.
+    user_version is updated inside the transaction so a rollback also reverts the
+    version number, keeping schema state and version counter always in sync.
     """
     conn = _migration_conn()
     try:
@@ -408,8 +410,8 @@ def migrate_db() -> None:
             try:
                 conn.execute("BEGIN")
                 m.up(conn)
-                conn.execute("COMMIT")
                 conn.execute(f"PRAGMA user_version = {m.version}")
+                conn.execute("COMMIT")
             except Exception as exc:
                 conn.execute("ROLLBACK")
                 raise RuntimeError(
@@ -443,8 +445,8 @@ def downgrade_db(steps: int = 1) -> None:
             try:
                 conn.execute("BEGIN")
                 m.down(conn)
-                conn.execute("COMMIT")
                 conn.execute(f"PRAGMA user_version = {m.version - 1}")
+                conn.execute("COMMIT")
             except Exception as exc:
                 conn.execute("ROLLBACK")
                 raise RuntimeError(

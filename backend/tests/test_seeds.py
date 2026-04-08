@@ -381,3 +381,15 @@ def test_upload_seed_image_rename_failure_no_db_update(client, tmp_path, monkeyp
     lettuce = next(s for s in seeds if s["id"] == "test-lettuce")
     # With rename-first ordering the DB UPDATE never ran, so image_url stays None
     assert lettuce["image_url"] is None
+
+
+def test_upload_seed_image_unknown_seed_returns_404(client, tmp_path, monkeypatch):
+    """POST /api/seeds/{id}/image must return 404 for an unknown seed_id."""
+    import backend.app.services.seed_service as ss
+    monkeypatch.setattr(ss, "PHOTOS_DIR", str(tmp_path))
+
+    r = client.post(
+        "/api/seeds/nonexistent-seed-xyz/image",
+        files={"file": ("photo.jpg", b"data", "image/jpeg")},
+    )
+    assert r.status_code == 404

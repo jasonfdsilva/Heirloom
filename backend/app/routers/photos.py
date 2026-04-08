@@ -72,6 +72,11 @@ async def upload_plant_photo(
     taken_date: str = Form(""),
     db: sqlite3.Connection = Depends(get_db),
 ):
+    cell = db.execute(
+        "SELECT id FROM grid_cells WHERE plant_guid = ?", (plant_guid,)
+    ).fetchone()
+    if not cell:
+        raise HTTPException(404, "Plant not found")
     content = await file.read()
     return photo_service.upload_plant_photo(
         db, plant_guid, planting_id, file.filename or "", content, caption, taken_date

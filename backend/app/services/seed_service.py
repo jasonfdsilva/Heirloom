@@ -251,6 +251,8 @@ def suggest_common_name(name: str, category: str, species: Optional[str] = None)
 
 
 def upload_seed_image(db: sqlite3.Connection, seed_id: str, filename_hint: str, content: bytes) -> dict:
+    if not db.execute("SELECT id FROM seeds WHERE id = ?", (seed_id,)).fetchone():
+        raise HTTPException(404, "Seed not found")
     if len(content) > MAX_PHOTO_BYTES:
         raise HTTPException(413, f"Image exceeds {MAX_PHOTO_BYTES // (1024 * 1024)} MB limit")
     ext = os.path.splitext(filename_hint)[1].lower() if filename_hint else ".jpg"
