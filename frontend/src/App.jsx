@@ -16,6 +16,7 @@ import BulkEventModal from './components/modals/BulkEventModal';
 import AddLotModal from './components/modals/AddLotModal';
 import PhotoModal from './components/modals/PhotoModal';
 import PlantingModal from './components/modals/PlantingModal';
+import QuickPlantModal from './components/modals/QuickPlantModal';
 import QuickNoteModal from './components/modals/QuickNoteModal';
 import QuickPhotoModal from './components/modals/QuickPhotoModal';
 import Nav from './components/nav/Nav';
@@ -397,7 +398,8 @@ export default function App() {
     const clean = {};
     const allowed = ['seed_id', 'structure_id', 'year', 'qty_started', 'qty_planted',
       'indoor_start_date', 'hardening_date', 'transplant_date', 'direct_sow_date',
-      'first_harvest_date', 'status', 'notes', 'seed_lot_id'];
+      'first_harvest_date', 'status', 'notes', 'seed_lot_id',
+      'method', 'purchased_date', 'planted_out_date'];
     allowed.forEach(key => {
       if (data[key] !== undefined) clean[key] = data[key];
     });
@@ -734,6 +736,18 @@ export default function App() {
     }
   };
 
+  const handleQuickPlantCreated = async (plantingId) => {
+    setShowModal(null);
+    await loadData();
+    try {
+      const all = await api.get(`/api/plantings?year=${new Date().getFullYear()}`);
+      const created = all.find(p => p.id === plantingId);
+      if (created) setActivePaintPlanting(created);
+    } catch (err) {
+      showAppError(err);
+    }
+  };
+
   // ── Main render ────────────────────────────────────────────────────────────
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'Fraunces, serif', fontSize: 24, color: '#8a8580' }}>Loading Heirloom...</div>;
@@ -935,6 +949,15 @@ export default function App() {
             onClose={() => { setShowModal(null); setEditData({}); setModalError(null); }}
             isEdit={showModal === 'edit-planting'}
             title={showModal === 'duplicate' ? 'Duplicate Planting' : null}
+          />
+        )}
+
+        {showModal === 'quick-plant' && selectedBed && (
+          <QuickPlantModal
+            seeds={seeds}
+            structureId={selectedBed.id}
+            onCreated={handleQuickPlantCreated}
+            onClose={() => setShowModal(null)}
           />
         )}
 

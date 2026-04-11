@@ -243,5 +243,83 @@ test.afterAll(async ({ request }) => {
   }
 });
 
+// ── 12. Quick Plant modal — plant now from BedPlanner ─────────────────────────
+
+const quickPlantIds = [];
+
+test('quick plant modal creates a planting and auto-selects it for painting', async ({ page }) => {
+  // Requires at least one structure — skip if DB has none (CI without init_db seed)
+  const structResp = await page.request.get('/api/structures');
+  const structures = await structResp.json();
+  test.skip(structures.length === 0, 'No structures in DB — skipping BedPlanner test');
+
+  const firstStructure = structures[0];
+
+  await page.goto('/');
+  await page.locator('.nav-link', { hasText: 'Garden Map' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Garden Map');
+
+  // Click the first structure in the Structure Summary panel to open BedPlanner
+  await page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Structure Summary' }) })
+    .locator('div[style*="cursor: pointer"]').first().click();
+
+  await expect(page.locator('h1.page-title')).toContainText('Planner');
+
+  // Click "+ New" — should open QuickPlantModal, NOT the full PlantingModal
+  await page.locator('button', { hasText: '+ New' }).click();
+  await expect(page.locator('.modal-title')).toContainText('🌱 Plant Now');
+
+  // Verify method toggle and date label default
+  await expect(page.locator('button', { hasText: /Direct Sow/ })).toBeVisible();
+  await expect(page.locator('button', { hasText: /Nursery Buy/ })).toBeVisible();
+
+  // Toggle to Nursery Buy and verify label changes
+  await page.locator('button', { hasText: /Nursery Buy/ }).click();
+  await expect(page.locator('text=PLANTED DATE')).toBeVisible();
+
+  // Switch back to Direct Sow
+  await page.locator('button', { hasText: /Direct Sow/ }).click();
+  await expect(page.locator('text=SOW DATE')).toBeVisible();
+
+  // Snapshot existing plantings
+  const beforeResp = await page.request.get('/api/plantings?year=2026');
+  const beforeIds = new Set((await beforeResp.json()).map(p => p.id));
+
+  // Select the first real seed option, then force Direct Sow (seed may auto-set nursery)
+  const seedSelect = page.locator('.modal select').first();
+  await seedSelect.selectOption({ index: 1 });
+  await page.locator('button', { hasText: /Direct Sow/ }).click();
+  await expect(page.locator('text=SOW DATE')).toBeVisible();
+
+  // Submit
+  await page.locator('button', { hasText: /Start Planting/ }).click();
+  await expect(page.locator('.modal-title')).not.toBeVisible({ timeout: 5000 });
+
+  // The status bar should now show the planting is selected for painting
+  await expect(page.locator('text=/Painting:/')).toBeVisible({ timeout: 5000 });
+
+  // Verify the planting was created in the DB
+  let newPlanting = null;
+  for (let i = 0; i < 10; i++) {
+    const afterResp = await page.request.get('/api/plantings?year=2026');
+    const afterList = await afterResp.json();
+    newPlanting = afterList.find(p => !beforeIds.has(p.id));
+    if (newPlanting) break;
+    await page.waitForTimeout(400);
+  }
+
+  expect(newPlanting).toBeTruthy();
+  expect(newPlanting.method).toBe('direct');
+  expect(newPlanting.direct_sow_date).toBeTruthy();
+  expect(newPlanting.structure_id).toBe(firstStructure.id);
+  if (newPlanting) quickPlantIds.push(newPlanting.id);
+});
+
+test.afterAll(async ({ request }) => {
+  for (const id of quickPlantIds) {
+    await request.delete(`/api/plantings/${id}`).catch(() => {});
+  }
+});
+
 // Export/import feature was intentionally removed in Batch 3.
 // Backups are handled at the DB level via scripts/backup.sh.

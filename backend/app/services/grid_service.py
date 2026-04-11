@@ -79,6 +79,15 @@ def update_grid(db: sqlite3.Connection, structure_id: str, data: GridUpdate) -> 
             )
         except Exception as exc:  # noqa: BLE001 — swallow to keep painter UX smooth
             logger.warning("grid INSERT failed for cell (%s,%s): %s", cell["row"], cell["col"], exc)
+    # Sync qty_planted (and quantity) to live cell count so the UI stays accurate
+    # without requiring a separate save step.
+    total = db.execute(
+        "SELECT COUNT(*) FROM grid_cells WHERE planting_id = ?", (data.planting_id,)
+    ).fetchone()[0]
+    db.execute(
+        "UPDATE plantings SET qty_planted = ?, quantity = ? WHERE id = ?",
+        (total, total, data.planting_id)
+    )
     db.commit()
     return {"message": "Grid updated", "cell_count": len(data.cells)}
 
@@ -106,6 +115,9 @@ def delete_grid_cells(
     total = db.execute(
         "SELECT COUNT(*) FROM grid_cells WHERE planting_id = ?", (planting_id,)
     ).fetchone()[0]
-    db.execute("UPDATE plantings SET quantity = ? WHERE id = ?", (total, planting_id))
+    db.execute(
+        "UPDATE plantings SET qty_planted = ?, quantity = ? WHERE id = ?",
+        (total, total, planting_id)
+    )
     db.commit()
     return {"message": "Cells removed"}

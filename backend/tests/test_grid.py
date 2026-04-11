@@ -228,3 +228,28 @@ def test_clear_cells_updates_planting_quantity(client):
     plantings = client.get("/api/plantings?year=2026").json()
     p = next(p for p in plantings if p["id"] == pid)
     assert p["quantity"] == 1
+
+
+def test_paint_cell_updates_qty_planted(client):
+    """Painting cells updates qty_planted on the planting to match the total cell count."""
+    pid = _make_planting(client)
+    client.post("/api/structures/test-bed-1/grid", json={
+        "planting_id": pid,
+        "cells": [{"row": 0, "col": 0}, {"row": 0, "col": 1}, {"row": 0, "col": 2}],
+    })
+    plantings = client.get("/api/plantings?year=2026").json()
+    p = next(p for p in plantings if p["id"] == pid)
+    assert p["qty_planted"] == 3
+
+
+def test_delete_cell_decrements_qty_planted(client):
+    """Deleting a cell decrements qty_planted to match remaining cell count."""
+    pid = _make_planting(client)
+    client.post("/api/structures/test-bed-1/grid", json={
+        "planting_id": pid,
+        "cells": [{"row": 0, "col": 0}, {"row": 0, "col": 1}, {"row": 0, "col": 2}],
+    })
+    client.delete(f"/api/structures/test-bed-1/grid/cells?planting_id={pid}&rows=0&cols=0")
+    plantings = client.get("/api/plantings?year=2026").json()
+    p = next(p for p in plantings if p["id"] == pid)
+    assert p["qty_planted"] == 2

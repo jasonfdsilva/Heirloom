@@ -159,7 +159,7 @@ export default function BedPlanner({
           <div className="card" style={{ padding: 16, maxHeight: 580, overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h4 style={{ fontSize: 14, fontFamily: 'Fraunces, serif', margin: 0 }}>Paint Palette</h4>
-              <button className="btn btn-primary btn-sm" onClick={() => { setEditData({ structure_id: bed.id }); setShowModal('planting'); }}>+ New</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowModal('quick-plant')}>+ New</button>
             </div>
             <div style={{ fontSize: 11, color: '#8a8580', marginBottom: 10 }}>Click a planting to select it, then paint cells on the grid. A planting can span multiple beds.</div>
             {plantings.length === 0 && (
