@@ -321,5 +321,68 @@ test.afterAll(async ({ request }) => {
   }
 });
 
+// ── 13. Quick Plant modal — seed lot selection ────────────────────────────────
+
+test('quick plant modal shows lot dropdown and sends seed_lot_id when a lot is selected', async ({ page }) => {
+  // Find a seed that has at least one lot
+  const lotsResp = await page.request.get('/api/seed-lots');
+  const allLots = await lotsResp.json();
+  test.skip(allLots.length === 0, 'No seed lots in DB — skipping lot selection test');
+
+  const firstLot = allLots[0];
+  const seedId = firstLot.seed_id;
+
+  // Also need a structure
+  const structResp = await page.request.get('/api/structures');
+  const structures = await structResp.json();
+  test.skip(structures.length === 0, 'No structures in DB — skipping lot selection test');
+  const firstStructure = structures[0];
+
+  // Navigate to BedPlanner for the first structure
+  await page.goto('/');
+  await page.locator('.nav-link', { hasText: 'Garden Map' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Garden Map');
+
+  await page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Structure Summary' }) })
+    .locator('div[style*="cursor: pointer"]').first().click();
+  await expect(page.locator('h1.page-title')).toContainText('Planner', { timeout: 5000 });
+
+  // Open QuickPlantModal
+  await page.locator('button', { hasText: '+ New' }).click();
+  await expect(page.locator('.modal-title')).toContainText('🌱 Plant Now');
+
+  // Select the seed that has a lot
+  const seedSelect = page.locator('.modal select').first();
+  await seedSelect.selectOption({ value: seedId });
+
+  // The Seed Packet dropdown should now be visible
+  await expect(page.locator('label', { hasText: 'Seed Packet' })).toBeVisible({ timeout: 3000 });
+
+  // Select the first lot
+  const lotSelect = page.locator('select').filter({ hasText: '— Any packet —' });
+  await lotSelect.selectOption({ value: String(firstLot.id) });
+
+  // Snapshot before submit
+  const beforeResp = await page.request.get('/api/plantings?year=2026');
+  const beforeIds = new Set((await beforeResp.json()).map(p => p.id));
+
+  await page.locator('button', { hasText: /Start Planting/ }).click();
+  await expect(page.locator('.modal-title')).not.toBeVisible({ timeout: 5000 });
+
+  // Poll for the new planting
+  let newPlanting = null;
+  for (let i = 0; i < 10; i++) {
+    const afterResp = await page.request.get('/api/plantings?year=2026');
+    const afterList = await afterResp.json();
+    newPlanting = afterList.find(p => !beforeIds.has(p.id));
+    if (newPlanting) break;
+    await page.waitForTimeout(400);
+  }
+
+  expect(newPlanting).toBeTruthy();
+  expect(newPlanting.seed_lot_id).toBe(firstLot.id);
+  if (newPlanting) quickPlantIds.push(newPlanting.id);
+});
+
 // Export/import feature was intentionally removed in Batch 3.
 // Backups are handled at the DB level via scripts/backup.sh.

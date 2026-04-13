@@ -3,9 +3,10 @@ import api from '../../lib/api';
 
 const CATEGORIES = ['Flowers', 'Fruit', 'Herbs', 'Tomatoes', 'Vegetables', 'Other'];
 
-export default function QuickPlantModal({ seeds, structureId, onCreated, onClose }) {
+export default function QuickPlantModal({ seeds, lots = [], structureId, onCreated, onClose }) {
   const [filter, setFilter] = useState('');
   const [selectedSeedId, setSelectedSeedId] = useState('');
+  const [selectedLotId, setSelectedLotId] = useState(null);
   const [method, setMethod] = useState('direct');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [showNewSeed, setShowNewSeed] = useState(false);
@@ -29,9 +30,10 @@ export default function QuickPlantModal({ seeds, structureId, onCreated, onClose
 
   const selectedSeed = seeds.find(s => s.id === selectedSeedId);
 
-  // Auto-set method when seed is selected
+  // Auto-set method when seed is selected; reset lot since it belongs to the previous seed
   const handleSelectSeed = (seed) => {
     setSelectedSeedId(seed.id);
+    setSelectedLotId(null);
     if (seed.direct_sow && !seed.start_indoors) {
       setMethod('direct');
     } else {
@@ -77,6 +79,7 @@ export default function QuickPlantModal({ seeds, structureId, onCreated, onClose
         method,
         year: new Date().getFullYear(),
         status: 'active',
+        ...(selectedLotId ? { seed_lot_id: selectedLotId } : {}),
         ...(method === 'direct'
           ? { direct_sow_date: date }
           : { planted_out_date: date }),
@@ -187,6 +190,31 @@ export default function QuickPlantModal({ seeds, structureId, onCreated, onClose
             </button>
           </div>
         )}
+
+        {/* Seed lot picker — only shown when the selected seed has lots on file */}
+        {selectedSeedId && (() => {
+          const seedLots = lots.filter(l => String(l.seed_id) === String(selectedSeedId));
+          if (!seedLots.length) return null;
+          return (
+            <div className="form-group">
+              <label className="form-label">
+                Seed Packet <span style={{ fontWeight: 400, fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>optional</span>
+              </label>
+              <select
+                className="form-input"
+                value={selectedLotId || ''}
+                onChange={e => setSelectedLotId(e.target.value ? parseInt(e.target.value, 10) : null)}
+              >
+                <option value="">— Any packet —</option>
+                {seedLots.map(l => (
+                  <option key={l.id} value={l.id}>
+                    {l.lot_code} ({l.packed_for_year || '?'}{l.supplier ? ` · ${l.supplier}` : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
 
         {/* Method toggle */}
         <div className="form-group">

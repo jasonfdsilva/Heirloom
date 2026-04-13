@@ -17,8 +17,14 @@ const SEEDS = [
   { id: 3, name: 'Shishito Pepper', category: 'Peppers', direct_sow: false, start_indoors: false },
 ];
 
+const LOTS = [
+  { id: 10, seed_id: 1, lot_code: 'BL-2025-001', packed_for_year: 2025, supplier: "Johnny's" },
+  { id: 11, seed_id: 1, lot_code: 'BL-2024-002', packed_for_year: 2024, supplier: null },
+];
+
 const defaultProps = {
   seeds: SEEDS,
+  lots: [],
   structureId: 'test-bed-1',
   onCreated: vi.fn(),
   onClose: vi.fn(),
@@ -199,6 +205,74 @@ describe('QuickPlantModal', () => {
       expect(screen.getByText('Seed name and category are required.')).toBeInTheDocument();
     });
     expect(api.post).not.toHaveBeenCalled();
+  });
+
+  // ── Seed lot selection ────────────────────────────────────────────────────────
+
+  it('lot dropdown is hidden when selected seed has no lots', () => {
+    render(<QuickPlantModal {...defaultProps} lots={[]} />);
+    fireEvent.change(screen.getByRole('listbox'), { target: { value: '1' } });
+    expect(screen.queryByText('Seed Packet')).not.toBeInTheDocument();
+  });
+
+  it('lot dropdown appears when selected seed has matching lots', () => {
+    render(<QuickPlantModal {...defaultProps} lots={LOTS} />);
+    fireEvent.change(screen.getByRole('listbox'), { target: { value: '1' } });
+    expect(screen.getByText(/Seed Packet/)).toBeInTheDocument();
+    expect(screen.getByText(/BL-2025-001/)).toBeInTheDocument();
+    expect(screen.getByText(/BL-2024-002/)).toBeInTheDocument();
+  });
+
+  it('lot dropdown not shown for a seed with no matching lots', () => {
+    render(<QuickPlantModal {...defaultProps} lots={LOTS} />);
+    // Seed id=2 has no lots in LOTS
+    fireEvent.change(screen.getByRole('listbox'), { target: { value: '2' } });
+    expect(screen.queryByText('Seed Packet')).not.toBeInTheDocument();
+  });
+
+  it('selecting a lot includes seed_lot_id in POST payload', async () => {
+    const onCreated = vi.fn();
+    render(<QuickPlantModal {...defaultProps} lots={LOTS} onCreated={onCreated} />);
+    fireEvent.change(screen.getByRole('listbox'), { target: { value: '1' } });
+    // Pick the first lot option
+    const lotSelect = screen.getByDisplayValue('— Any packet —');
+    fireEvent.change(lotSelect, { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Planting/ }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
+    expect(api.post).toHaveBeenCalledWith('/api/plantings', expect.objectContaining({
+      seed_lot_id: 10,
+    }));
+  });
+
+  it('leaving "Any packet" sends no seed_lot_id in payload', async () => {
+    const onCreated = vi.fn();
+    render(<QuickPlantModal {...defaultProps} lots={LOTS} onCreated={onCreated} />);
+    fireEvent.change(screen.getByRole('listbox'), { target: { value: '1' } });
+    // Leave lot dropdown at default
+    fireEvent.click(screen.getByRole('button', { name: /Start Planting/ }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
+    const call = api.post.mock.calls[0][1];
+    expect(call).not.toHaveProperty('seed_lot_id');
+  });
+
+  it('lot dropdown appears when seed_id in lots is a string matching numeric selectedSeedId', () => {
+    // Guards against type divergence: API could return seed_id as string
+    const stringIdLots = [{ id: 10, seed_id: '1', lot_code: 'BL-2025-001', packed_for_year: 2025, supplier: null }];
+    render(<QuickPlantModal {...defaultProps} lots={stringIdLots} />);
+    fireEvent.change(screen.getByRole('listbox'), { target: { value: '1' } }); // seed id=1
+    expect(screen.getByText(/Seed Packet/)).toBeInTheDocument();
+  });
+
+  it('lot selection resets when a different seed is chosen', () => {
+    render(<QuickPlantModal {...defaultProps} lots={LOTS} />);
+    // Select seed 1 and pick a lot
+    fireEvent.change(screen.getByRole('listbox'), { target: { value: '1' } });
+    const lotSelect = screen.getByDisplayValue('— Any packet —');
+    fireEvent.change(lotSelect, { target: { value: '10' } });
+    expect(screen.getByDisplayValue(/BL-2025-001/)).toBeInTheDocument();
+    // Switch to seed 2 (no lots) — lot dropdown disappears (reset happened)
+    fireEvent.change(screen.getByRole('listbox'), { target: { value: '2' } });
+    expect(screen.queryByText('Seed Packet')).not.toBeInTheDocument();
   });
 
   it('creates a new seed and selects it automatically', async () => {

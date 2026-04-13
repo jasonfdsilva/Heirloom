@@ -955,6 +955,7 @@ export default function App() {
         {showModal === 'quick-plant' && selectedBed && (
           <QuickPlantModal
             seeds={seeds}
+            lots={lots}
             structureId={selectedBed.id}
             onCreated={handleQuickPlantCreated}
             onClose={() => setShowModal(null)}
