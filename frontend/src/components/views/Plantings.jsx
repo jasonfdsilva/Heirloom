@@ -363,8 +363,8 @@ export default function Plantings({
                                 </td>
                               );
                             })()}
-                            <td style={{ fontSize: 13 }}>{formatDate(p.indoor_start_date || p.direct_sow_date)}</td>
-                            <td style={{ fontSize: 13 }}>{formatDate(p.transplant_date)}</td>
+                            <td style={{ fontSize: 13 }}>{formatDate(p.indoor_start_date || p.direct_sow_date || p.planted_out_date)}</td>
+                            <td style={{ fontSize: 13 }}>{formatDate(p.transplant_date || p.direct_sow_date || p.planted_out_date)}</td>
                             <td style={{ fontSize: 13 }}>
                               {(() => {
                                 const actual = p.actual_germ_rate;
