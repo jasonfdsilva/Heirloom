@@ -30,7 +30,7 @@ export default function Dashboard({
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">Recent Plantings</h3>
-              <button className="btn btn-primary btn-sm" onClick={() => { setEditData({}); setShowModal('planting'); }}>+ Add Planting</button>
+              <button className="btn btn-primary btn-sm" onClick={() => { const today = new Date().toISOString().slice(0, 10); setEditData({ direct_sow_date: today, indoor_start_date: today }); setShowModal('planting'); }}>+ Add Planting</button>
             </div>
             {plantings.slice(0, 8).map(p => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #f0ece6', cursor: 'pointer' }} onClick={() => openPlantingDetail(p)}>

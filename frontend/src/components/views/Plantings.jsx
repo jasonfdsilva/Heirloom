@@ -78,7 +78,7 @@ export default function Plantings({
           >
             {bulkSelectMode ? 'Cancel Select' : 'Select'}
           </button>
-          <button className="btn btn-primary" onClick={() => { setEditData({}); setShowModal('planting'); }}>+ New Planting</button>
+          <button className="btn btn-primary" onClick={() => { const today = new Date().toISOString().slice(0, 10); setEditData({ direct_sow_date: today, indoor_start_date: today }); setShowModal('planting'); }}>+ New Planting</button>
         </div>
       </div>
 
