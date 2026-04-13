@@ -363,7 +363,7 @@ export default function Plantings({
                                 </td>
                               );
                             })()}
-                            <td style={{ fontSize: 13 }}>{formatDate(p.indoor_start_date)}</td>
+                            <td style={{ fontSize: 13 }}>{formatDate(p.indoor_start_date || p.direct_sow_date)}</td>
                             <td style={{ fontSize: 13 }}>{formatDate(p.transplant_date)}</td>
                             <td style={{ fontSize: 13 }}>
                               {(() => {

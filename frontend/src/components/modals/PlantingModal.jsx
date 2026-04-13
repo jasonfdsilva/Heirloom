@@ -109,7 +109,11 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
                   if (seed) {
                     const suggested = getSuggestedDates(seed);
                     const inferredMethod = seed.start_indoors ? 'indoors' : seed.direct_sow ? 'direct' : 'indoors';
-                    setEditData(d => ({ ...d, seed_id: e.target.value, method: inferredMethod, ...suggested }));
+                    // Suggested dates fill empty slots only — don't overwrite dates the user already has
+                    setEditData(d => {
+                      const merged = { ...suggested, ...d };
+                      return { ...merged, seed_id: e.target.value, method: inferredMethod };
+                    });
                   }
                 }}>
                   <option value="">Select a variety...</option>
