@@ -120,9 +120,14 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
                   <option value="_add_custom">+ Add custom variety...</option>
                   {categories.map(cat => (
                     <optgroup key={cat} label={cat}>
-                      {seeds.filter(s => s.category === cat).map(s => (
-                        <option key={s.id} value={s.id}>{s.name} {s.organic ? '(OG)' : ''}</option>
-                      ))}
+                      {seeds.filter(s => s.category === cat).map(s => {
+                        const seedLotCodes = lots.filter(l => String(l.seed_id) === String(s.id) && l.lot_code).map(l => l.lot_code).join(', ');
+                        return (
+                          <option key={s.id} value={s.id}>
+                            {s.name} {s.organic ? '(OG)' : ''}{seedLotCodes ? ` — ${seedLotCodes}` : ''}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                   ))}
                 </select>
@@ -132,7 +137,7 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
         )}
 
         {editData.seed_id && (() => {
-          const seedLots = lots.filter(l => l.seed_id === editData.seed_id);
+          const seedLots = lots.filter(l => String(l.seed_id) === String(editData.seed_id));
           if (!seedLots.length) return null;
           return (
             <div className="form-group">
