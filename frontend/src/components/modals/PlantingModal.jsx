@@ -146,7 +146,7 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
                 <option value="">— Any packet —</option>
                 {seedLots.map(l => (
                   <option key={l.id} value={l.id}>
-                    {l.lot_code} ({l.packed_for_year || '?'}{l.supplier ? ` · ${l.supplier}` : ''})
+                    {l.supplier_lot || l.lot_code}{l.supplier_lot && l.lot_code ? ` (${l.lot_code})` : ''}{l.packed_for_year ? ` · ${l.packed_for_year}` : ''}{l.supplier ? ` · ${l.supplier}` : ''}
                   </option>
                 ))}
               </select>
