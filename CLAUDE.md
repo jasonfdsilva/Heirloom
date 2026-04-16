@@ -167,8 +167,8 @@ Every feature follows these steps in order:
 5. **Code review** — spawn a separate review agent to inspect the diff for bugs, security issues, and code quality; this is a **blocker**: present the report to the user, who may request changes before proceeding
 6. **Snapshot prod → sandbox** — run `bash scripts/snapshot-to-dev.sh` so sandbox has real production data
 7. **Sandbox deploy** — build and deploy to the sandbox container at port 8086
-8. **Manual gate** — verify the feature works correctly at http://localhost:8086 (user approval required)
-9. **Promote to prod** — rebuild and restart the production container at port 8085
+8. **Manual gate** — tell the user "Sandbox is ready at http://localhost:8086 — please verify and confirm before I promote." Then **stop and wait**. Do NOT use the preview tool as a substitute for user verification. Do NOT proceed to step 9 until the user explicitly says the feature looks good (e.g. "looks good", "promote it", "ship it").
+9. **Promote to prod** — rebuild and restart the production container at port 8085 — only after explicit user sign-off on step 8
 10. **Backup** — snapshot production data if schema changed
 11. **Git commit** — commit all changes with a descriptive message
 12. **Push to GitHub** — `git push origin main` to sync the remote
