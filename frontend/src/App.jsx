@@ -276,6 +276,7 @@ export default function App() {
   const [draggingLabel, setDraggingLabel] = useState(null);
   const [activePaintPlanting, setActivePaintPlanting] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedGridPlanting, setSelectedGridPlanting] = useState(null);
   const [mapEditMode, setMapEditMode] = useState(false);
   const [selectedPlantGuid, setSelectedPlantGuid] = useState(null);
   const [plantDetail, setPlantDetail] = useState(null);
@@ -736,6 +737,27 @@ export default function App() {
     }
   };
 
+  const handleGridCellSelect = (plantingId) => {
+    if (!plantingId) { setSelectedGridPlanting(null); return; }
+    const found = plantings.find(p => Number(p.id) === Number(plantingId));
+    setSelectedGridPlanting(found || null);
+  };
+
+  const handleGridEditPlanting = () => {
+    if (!selectedGridPlanting) return;
+    setSelectedPlanting(selectedGridPlanting);
+    setEditData(selectedGridPlanting);
+    setShowModal('edit-planting');
+  };
+
+  const handleGridLogEvent = () => {
+    if (!selectedGridPlanting) return;
+    const today = new Date().toISOString().slice(0, 10);
+    setSelectedPlanting(selectedGridPlanting);
+    setEditData({ event_date: today, event_type: 'note' });
+    setShowModal('event');
+  };
+
   const handleQuickPlantCreated = async (plantingId) => {
     setShowModal(null);
     await loadData();
@@ -904,7 +926,7 @@ export default function App() {
               gridCells={gridCells}
               setGridCells={setGridCells}
               activePaintPlanting={activePaintPlanting}
-              setActivePaintPlanting={setActivePaintPlanting}
+              setActivePaintPlanting={p => { setActivePaintPlanting(p); if (p) setSelectedGridPlanting(null); }}
               isDragging={isDragging}
               setIsDragging={setIsDragging}
               plantings={plantings}
@@ -917,6 +939,10 @@ export default function App() {
               handleClearPlanting={handleClearPlanting}
               loadData={loadData}
               setView={setView}
+              selectedGridPlanting={selectedGridPlanting}
+              onGridCellSelect={handleGridCellSelect}
+              onGridEditPlanting={handleGridEditPlanting}
+              onGridLogEvent={handleGridLogEvent}
             />
           )}
           {view === 'detail' && (

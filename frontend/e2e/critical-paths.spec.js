@@ -384,5 +384,60 @@ test('quick plant modal shows lot dropdown and sends seed_lot_id when a lot is s
   if (newPlanting) quickPlantIds.push(newPlanting.id);
 });
 
+// ── 14. BedPlanner click-to-inspect — select planting, edit, log event ────────
+
+test('clicking a painted cell shows action strip and opens edit/event modals', async ({ page }) => {
+  // Need at least one structure with painted cells
+  const structResp = await page.request.get('/api/structures');
+  const structures = await structResp.json();
+  test.skip(structures.length === 0, 'No structures — skipping BedPlanner inspect test');
+
+  // Find a structure that has grid cells
+  let targetStructure = null;
+  let firstCell = null;
+  for (const s of structures) {
+    const cellsResp = await page.request.get(`/api/structures/${s.id}/grid`);
+    const cells = await cellsResp.json();
+    if (cells.length > 0) { targetStructure = s; firstCell = cells[0]; break; }
+  }
+  test.skip(!targetStructure, 'No painted cells in any structure — skipping');
+
+  // Navigate to Garden Map and open BedPlanner
+  await page.goto('/');
+  await page.locator('.nav-link', { hasText: 'Garden Map' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Garden Map');
+  await page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Structure Summary' }) })
+    .locator('div[style*="cursor: pointer"]').first().click();
+  await expect(page.locator('h1.page-title')).toContainText('Planner', { timeout: 5000 });
+
+  // No action strip visible initially
+  await expect(page.locator('button', { hasText: '✏️ Edit' })).not.toBeVisible();
+
+  // Click a painted cell (title contains its seed name)
+  const paintedCell = page.locator(`[title*="${firstCell.seed_name}"]`).first();
+  await paintedCell.click();
+
+  // Action strip should appear
+  await expect(page.locator('button', { hasText: '✏️ Edit' })).toBeVisible({ timeout: 3000 });
+  await expect(page.locator('button', { hasText: '📋 Log Event' })).toBeVisible();
+
+  // Open Log Event modal
+  await page.locator('button', { hasText: '📋 Log Event' }).click();
+  await expect(page.locator('.modal-title')).toBeVisible({ timeout: 3000 });
+  await page.locator('button', { hasText: 'Cancel' }).first().click();
+  await expect(page.locator('.modal-title')).not.toBeVisible();
+
+  // Open Edit Planting modal
+  await page.locator('button', { hasText: '✏️ Edit' }).click();
+  await expect(page.locator('button', { hasText: 'Save Changes' })).toBeVisible({ timeout: 3000 });
+  await page.locator('button', { hasText: 'Cancel' }).first().click();
+  await expect(page.locator('button', { hasText: 'Save Changes' })).not.toBeVisible();
+
+  // × dismisses the action strip
+  await expect(page.locator('button', { name: '×' })).toBeVisible();
+  await page.locator('button', { name: '×' }).click();
+  await expect(page.locator('button', { hasText: '✏️ Edit' })).not.toBeVisible();
+});
+
 // Export/import feature was intentionally removed in Batch 3.
 // Backups are handled at the DB level via scripts/backup.sh.

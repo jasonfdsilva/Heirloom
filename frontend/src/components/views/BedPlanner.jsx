@@ -20,6 +20,10 @@ export default function BedPlanner({
   handleClearPlanting,
   loadData,
   setView,
+  selectedGridPlanting,
+  onGridCellSelect,
+  onGridEditPlanting,
+  onGridLogEvent,
 }) {
   if (!selectedBed) return null;
   const bed = selectedBed;
@@ -93,8 +97,11 @@ export default function BedPlanner({
                       {Array.from({ length: cols }).map((_, c) => {
                         const cell = cellMap[`${r}-${c}`];
                         const isActive = activePaintPlanting && cell && cell.planting_id === activePaintPlanting.id;
+                        const isSelected = !activePaintPlanting && selectedGridPlanting && cell && Number(cell.planting_id) === Number(selectedGridPlanting.id);
                         const imageUrl = cell ? plantingImageMap[cell.planting_id] : null;
                         const useThumb = imageUrl && cellPx >= 24;
+                        const outline = isActive ? '2px solid #e8c56d' : isSelected ? '2px solid #3b82f6' : 'none';
+                        const cursor = activePaintPlanting ? 'crosshair' : (cell ? 'pointer' : 'default');
                         return (
                           <div
                             key={c}
@@ -106,16 +113,23 @@ export default function BedPlanner({
                               backgroundSize: 'cover',
                               backgroundPosition: 'center',
                               opacity: cell ? 0.92 : 1,
-                              cursor: activePaintPlanting ? 'crosshair' : 'default',
+                              cursor,
                               position: 'relative',
                               overflow: 'hidden',
-                              outline: isActive ? '2px solid #e8c56d' : 'none',
+                              outline,
                               transition: 'outline 0.1s',
                             }}
                             title={cell ? `${cell.short_id || ''} ${cell.seed_name}` : `Empty`}
-                            onMouseDown={() => { setIsDragging(true); handleCellPaint(r, c); }}
-                            onMouseEnter={() => handleCellDrag(r, c)}
-                            onMouseUp={() => { setIsDragging(false); loadData(); }}
+                            onMouseDown={() => {
+                              if (activePaintPlanting) {
+                                setIsDragging(true);
+                                handleCellPaint(r, c);
+                              } else {
+                                onGridCellSelect(cell?.planting_id ?? null);
+                              }
+                            }}
+                            onMouseEnter={() => { if (activePaintPlanting) handleCellDrag(r, c); }}
+                            onMouseUp={() => { if (activePaintPlanting) { setIsDragging(false); loadData(); } }}
                             onDoubleClick={e => { e.stopPropagation(); if (!activePaintPlanting && cell?.plant_guid) openPlantPanel(cell.plant_guid); }}
                           >
                             {cell && useThumb && (
@@ -150,18 +164,39 @@ export default function BedPlanner({
             );
           })()}
           <div style={{ fontSize: 11, color: '#8a8580', marginTop: 8 }}>
-            {activePaintPlanting ? `Painting: ${activePaintPlanting.seed_name}. Click or drag cells to fill. Click filled cells to erase.` : 'Select a planting from the sidebar to start painting.'}
+            {activePaintPlanting
+              ? `Painting: ${activePaintPlanting.seed_name}. Click or drag cells to fill. Click filled cells to erase.`
+              : selectedGridPlanting
+                ? `Selected: ${selectedGridPlanting.seed_name}. Use the sidebar to edit or log an event.`
+                : 'Click a planted cell to select it, or choose a planting from the sidebar to paint.'}
           </div>
         </div>
 
         {/* Sidebar — unified paint palette */}
         <div style={{ width: 280, flexShrink: 0 }}>
+
+          {/* Action strip — shown when a planting is selected by clicking a cell */}
+          {selectedGridPlanting && (
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <strong style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 8 }}>
+                  🌿 {selectedGridPlanting.seed_name}
+                </strong>
+                <button className="btn btn-secondary btn-sm" onClick={() => onGridCellSelect(null)} style={{ flexShrink: 0 }}>×</button>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={onGridEditPlanting}>✏️ Edit</button>
+                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={onGridLogEvent}>📋 Log Event</button>
+              </div>
+            </div>
+          )}
+
           <div className="card" style={{ padding: 16, maxHeight: 580, overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h4 style={{ fontSize: 14, fontFamily: 'Fraunces, serif', margin: 0 }}>Paint Palette</h4>
               <button className="btn btn-primary btn-sm" onClick={() => setShowModal('quick-plant')}>+ New</button>
             </div>
-            <div style={{ fontSize: 11, color: '#8a8580', marginBottom: 10 }}>Click a planting to select it, then paint cells on the grid. A planting can span multiple beds.</div>
+            <div style={{ fontSize: 11, color: '#8a8580', marginBottom: 10 }}>Click a planted cell to select it, or click a planting below to start painting.</div>
             {plantings.length === 0 && (
               <div style={{ color: '#8a8580', fontSize: 13, padding: '12px 0' }}>No plantings yet. Create one to get started.</div>
             )}
