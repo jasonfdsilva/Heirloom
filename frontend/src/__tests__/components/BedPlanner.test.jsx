@@ -44,7 +44,6 @@ const defaultProps = {
   selectedGridPlanting: null,
   onGridCellSelect: vi.fn(),
   onGridEditPlanting: vi.fn(),
-  onGridLogEvent: vi.fn(),
 };
 
 describe('BedPlanner', () => {
@@ -54,16 +53,20 @@ describe('BedPlanner', () => {
 
   it('action strip is hidden when no grid planting is selected', () => {
     render(<BedPlanner {...defaultProps} selectedGridPlanting={null} />);
-    expect(screen.queryByText(/✏️ Edit/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/📋 Log Event/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/📋 Open Details/)).not.toBeInTheDocument();
   });
 
-  it('action strip renders with planting name when selectedGridPlanting is set', () => {
+  it('action strip renders with planting name and Open Details button when selectedGridPlanting is set', () => {
     render(<BedPlanner {...defaultProps} selectedGridPlanting={PLANTINGS[0]} />);
     // The action strip shows "🌿 <name>" — match the emoji prefix to distinguish from the palette
     expect(screen.getByText(/🌿 Buttercrunch Lettuce/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /✏️ Edit/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /📋 Log Event/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /📋 Open Details/ })).toBeInTheDocument();
+  });
+
+  it('action strip does not show a separate Log Event or Edit button', () => {
+    render(<BedPlanner {...defaultProps} selectedGridPlanting={PLANTINGS[0]} />);
+    expect(screen.queryByText(/📋 Log Event/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /✏️ Edit/ })).not.toBeInTheDocument();
   });
 
   it('× button calls onGridCellSelect(null)', () => {
@@ -73,18 +76,11 @@ describe('BedPlanner', () => {
     expect(onGridCellSelect).toHaveBeenCalledWith(null);
   });
 
-  it('Edit button calls onGridEditPlanting', () => {
+  it('Open Details button calls onGridEditPlanting', () => {
     const onGridEditPlanting = vi.fn();
     render(<BedPlanner {...defaultProps} selectedGridPlanting={PLANTINGS[0]} onGridEditPlanting={onGridEditPlanting} />);
-    fireEvent.click(screen.getByRole('button', { name: /✏️ Edit/ }));
+    fireEvent.click(screen.getByRole('button', { name: /📋 Open Details/ }));
     expect(onGridEditPlanting).toHaveBeenCalled();
-  });
-
-  it('Log Event button calls onGridLogEvent', () => {
-    const onGridLogEvent = vi.fn();
-    render(<BedPlanner {...defaultProps} selectedGridPlanting={PLANTINGS[0]} onGridLogEvent={onGridLogEvent} />);
-    fireEvent.click(screen.getByRole('button', { name: /📋 Log Event/ }));
-    expect(onGridLogEvent).toHaveBeenCalled();
   });
 
   // ── Cell click — idle mode ────────────────────────────────────────────────────
@@ -130,13 +126,13 @@ describe('BedPlanner', () => {
 
   it('shows default hint when nothing is selected', () => {
     render(<BedPlanner {...defaultProps} />);
-    // The footer below the grid uses "or choose a planting from the sidebar"
     expect(screen.getByText(/or choose a planting from the sidebar to paint/)).toBeInTheDocument();
   });
 
-  it('shows selected planting name in status text when grid planting is selected', () => {
+  it('shows selected planting name and Open Details hint in status text', () => {
     render(<BedPlanner {...defaultProps} selectedGridPlanting={PLANTINGS[0]} />);
     expect(screen.getByText(/Selected: Buttercrunch Lettuce/)).toBeInTheDocument();
+    expect(screen.getByText(/Open Details to view, edit, or log an event/)).toBeInTheDocument();
   });
 
   it('shows painting status text when paint mode is active', () => {

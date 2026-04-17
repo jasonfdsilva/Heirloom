@@ -384,9 +384,9 @@ test('quick plant modal shows lot dropdown and sends seed_lot_id when a lot is s
   if (newPlanting) quickPlantIds.push(newPlanting.id);
 });
 
-// ── 14. BedPlanner click-to-inspect — select planting, edit, log event ────────
+// ── 14. BedPlanner click-to-inspect — select planting, open Detail view ──────
 
-test('clicking a painted cell shows action strip and opens edit/event modals', async ({ page }) => {
+test('clicking a painted cell shows action strip and opens full Detail view', async ({ page }) => {
   // Need at least one structure with painted cells
   const structResp = await page.request.get('/api/structures');
   const structures = await structResp.json();
@@ -411,32 +411,26 @@ test('clicking a painted cell shows action strip and opens edit/event modals', a
   await expect(page.locator('h1.page-title')).toContainText('Planner', { timeout: 5000 });
 
   // No action strip visible initially
-  await expect(page.locator('button', { hasText: '✏️ Edit' })).not.toBeVisible();
+  await expect(page.locator('button', { hasText: '📋 Open Details' })).not.toBeVisible();
 
   // Click a painted cell (title contains its seed name)
   const paintedCell = page.locator(`[title*="${firstCell.seed_name}"]`).first();
   await paintedCell.click();
 
-  // Action strip should appear
-  await expect(page.locator('button', { hasText: '✏️ Edit' })).toBeVisible({ timeout: 3000 });
-  await expect(page.locator('button', { hasText: '📋 Log Event' })).toBeVisible();
+  // Action strip appears with Open Details button (no separate Edit or Log Event buttons)
+  await expect(page.locator('button', { hasText: '📋 Open Details' })).toBeVisible({ timeout: 3000 });
+  await expect(page.locator('button', { hasText: '📋 Log Event' })).not.toBeVisible();
 
-  // Open Log Event modal
-  await page.locator('button', { hasText: '📋 Log Event' }).click();
-  await expect(page.locator('.modal-title')).toBeVisible({ timeout: 3000 });
-  await page.locator('button', { hasText: 'Cancel' }).first().click();
-  await expect(page.locator('.modal-title')).not.toBeVisible();
+  // Open Details navigates to the full Detail view (Edit, Duplicate, Log Event, Add Photo all available)
+  await page.locator('button', { hasText: '📋 Open Details' }).click();
+  await expect(page.locator('button', { hasText: '← Back to Bed Planner' })).toBeVisible({ timeout: 3000 });
+  // Detail view action buttons are present
+  await expect(page.locator('button', { hasText: /Log Event/ })).toBeVisible();
+  await expect(page.locator('button', { hasText: /Edit/ })).toBeVisible();
 
-  // Open Edit Planting modal
-  await page.locator('button', { hasText: '✏️ Edit' }).click();
-  await expect(page.locator('button', { hasText: 'Save Changes' })).toBeVisible({ timeout: 3000 });
-  await page.locator('button', { hasText: 'Cancel' }).first().click();
-  await expect(page.locator('button', { hasText: 'Save Changes' })).not.toBeVisible();
-
-  // × dismisses the action strip
-  await expect(page.locator('button', { name: '×' })).toBeVisible();
-  await page.locator('button', { name: '×' }).click();
-  await expect(page.locator('button', { hasText: '✏️ Edit' })).not.toBeVisible();
+  // Back button returns to BedPlanner (not Plantings)
+  await page.locator('button', { hasText: '← Back to Bed Planner' }).click();
+  await expect(page.locator('h1.page-title')).toContainText('Planner', { timeout: 3000 });
 });
 
 // Export/import feature was intentionally removed in Batch 3.

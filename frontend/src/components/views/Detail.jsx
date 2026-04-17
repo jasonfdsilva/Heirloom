@@ -19,6 +19,7 @@ export default function Detail({
   seeds,
   plantingPhotos,
   setView,
+  backView = 'plantings',
   handleDuplicatePlanting,
   handleDeleteEvent,
   handleDeletePhoto,
@@ -123,7 +124,9 @@ export default function Detail({
 
   return (
     <div>
-      <button className="btn btn-secondary" style={{ marginBottom: 16 }} onClick={() => setView('plantings')}>← Back to Plantings</button>
+      <button className="btn btn-secondary" style={{ marginBottom: 16 }} onClick={() => setView(backView)}>
+        {backView === 'bed-planner' ? '← Back to Bed Planner' : '← Back to Plantings'}
+      </button>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>

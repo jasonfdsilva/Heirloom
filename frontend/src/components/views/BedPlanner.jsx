@@ -23,7 +23,6 @@ export default function BedPlanner({
   selectedGridPlanting,
   onGridCellSelect,
   onGridEditPlanting,
-  onGridLogEvent,
 }) {
   if (!selectedBed) return null;
   const bed = selectedBed;
@@ -167,7 +166,7 @@ export default function BedPlanner({
             {activePaintPlanting
               ? `Painting: ${activePaintPlanting.seed_name}. Click or drag cells to fill. Click filled cells to erase.`
               : selectedGridPlanting
-                ? `Selected: ${selectedGridPlanting.seed_name}. Use the sidebar to edit or log an event.`
+                ? `Selected: ${selectedGridPlanting.seed_name}. Click Open Details to view, edit, or log an event.`
                 : 'Click a planted cell to select it, or choose a planting from the sidebar to paint.'}
           </div>
         </div>
@@ -185,8 +184,7 @@ export default function BedPlanner({
                 <button className="btn btn-secondary btn-sm" onClick={() => onGridCellSelect(null)} style={{ flexShrink: 0 }}>×</button>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={onGridEditPlanting}>✏️ Edit</button>
-                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={onGridLogEvent}>📋 Log Event</button>
+                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={onGridEditPlanting}>📋 Open Details</button>
               </div>
             </div>
           )}

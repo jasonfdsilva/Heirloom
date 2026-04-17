@@ -277,6 +277,7 @@ export default function App() {
   const [activePaintPlanting, setActivePaintPlanting] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedGridPlanting, setSelectedGridPlanting] = useState(null);
+  const [detailBackView, setDetailBackView] = useState('plantings');
   const [mapEditMode, setMapEditMode] = useState(false);
   const [selectedPlantGuid, setSelectedPlantGuid] = useState(null);
   const [plantDetail, setPlantDetail] = useState(null);
@@ -321,7 +322,7 @@ export default function App() {
 
   // Refresh data whenever the user switches tabs
   useEffect(() => {
-    if (view !== 'detail' && view !== 'bed-planner') loadData();
+    if (view !== 'detail') loadData();
     if (view === 'photos' || view === 'dashboard') loadAllPhotos();
     if (view === 'dashboard') api.get('/api/dashboard/activity').then(setRecentActivity).catch(err => console.error('activity load error:', err));
   }, [view]);
@@ -387,9 +388,10 @@ export default function App() {
     }
   };
 
-  const openPlantingDetail = (p) => {
+  const openPlantingDetail = (p, backView = 'plantings') => {
     setSelectedPlanting(p);
     loadPhotos(p.id);
+    setDetailBackView(backView);
     setView('detail');
   };
 
@@ -745,18 +747,11 @@ export default function App() {
 
   const handleGridEditPlanting = () => {
     if (!selectedGridPlanting) return;
-    setSelectedPlanting(selectedGridPlanting);
-    setEditData(selectedGridPlanting);
-    setShowModal('edit-planting');
+    openPlantingDetail(selectedGridPlanting, 'bed-planner');
+    setSelectedGridPlanting(null); // clear so action strip doesn't show stale data on return
   };
 
-  const handleGridLogEvent = () => {
-    if (!selectedGridPlanting) return;
-    const today = new Date().toISOString().slice(0, 10);
-    setSelectedPlanting(selectedGridPlanting);
-    setEditData({ event_date: today, event_type: 'note' });
-    setShowModal('event');
-  };
+
 
   const handleQuickPlantCreated = async (plantingId) => {
     setShowModal(null);
@@ -942,7 +937,6 @@ export default function App() {
               selectedGridPlanting={selectedGridPlanting}
               onGridCellSelect={handleGridCellSelect}
               onGridEditPlanting={handleGridEditPlanting}
-              onGridLogEvent={handleGridLogEvent}
             />
           )}
           {view === 'detail' && (
@@ -951,6 +945,7 @@ export default function App() {
               seeds={seeds}
               plantingPhotos={plantingPhotos}
               setView={setView}
+              backView={detailBackView}
               handleDuplicatePlanting={handleDuplicatePlanting}
               handleDeleteEvent={handleDeleteEvent}
               handleDeletePhoto={handleDeletePhoto}
