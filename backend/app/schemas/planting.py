@@ -19,6 +19,7 @@ class PlantingCreate(BaseModel):
     status: str = "planned"
     notes: Optional[str] = None
     seed_lot_id: Optional[int] = None
+    supplier: Optional[str] = None
 
 
 class PlantingUpdate(BaseModel):
@@ -36,6 +37,7 @@ class PlantingUpdate(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
     seed_lot_id: Optional[int] = None
+    supplier: Optional[str] = None
 
 
 class FamilyNotesUpdate(BaseModel):

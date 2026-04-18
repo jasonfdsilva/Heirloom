@@ -402,7 +402,7 @@ export default function App() {
     const allowed = ['seed_id', 'structure_id', 'year', 'qty_started', 'qty_planted',
       'indoor_start_date', 'hardening_date', 'transplant_date', 'direct_sow_date',
       'first_harvest_date', 'status', 'notes', 'seed_lot_id',
-      'method', 'purchased_date', 'planted_out_date'];
+      'method', 'purchased_date', 'planted_out_date', 'supplier'];
     allowed.forEach(key => {
       if (data[key] !== undefined) clean[key] = data[key];
     });
@@ -458,7 +458,7 @@ export default function App() {
     if (!source) return;
     const fields = ['seed_id', 'structure_id', 'year', 'qty_started', 'qty_planted',
       'indoor_start_date', 'hardening_date', 'transplant_date', 'direct_sow_date',
-      'first_harvest_date', 'status', 'notes'];
+      'first_harvest_date', 'status', 'notes', 'method', 'purchased_date', 'planted_out_date', 'supplier'];
     const prefilled = {};
     fields.forEach(k => { if (source[k] != null) prefilled[k] = source[k]; });
     setEditData(prefilled);

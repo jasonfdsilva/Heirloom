@@ -39,6 +39,10 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
                     )}
                   </div>
                   <div className="form-group" style={{ marginBottom: 8 }}>
+                    <label className="form-label">Common Name</label>
+                    <input type="text" className="form-input" value={editData._customCommonName || ''} onChange={e => setEditData(d => ({ ...d, _customCommonName: e.target.value }))} placeholder="e.g., Basil, Sage, Tomato" />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 8 }}>
                     <label className="form-label">Days to Maturity</label>
                     <input type="text" className="form-input" value={editData._customDays || ''} onChange={e => setEditData(d => ({ ...d, _customDays: e.target.value }))} placeholder="e.g., 75" />
                   </div>
@@ -72,6 +76,7 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
                       const res = await api.post('/api/seeds', {
                         name: editData._customName,
                         category: category,
+                        common_name: editData._customCommonName || null,
                         days_to_maturity: editData._customDays || null,
                         organic: editData._customOrganic || false,
                         supplier: editData._customSupplier || null,
@@ -87,7 +92,7 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
                           seed_id: res.id,
                           _addingCustom: false,
                           _customName: '', _customCategory: '', _customCategoryText: '',
-                          _customDays: '', _customMethod: '', _customSupplier: '', _customOrganic: false,
+                          _customCommonName: '', _customDays: '', _customMethod: '', _customSupplier: '', _customOrganic: false,
                         }));
                       } else {
                         setModalError(res.detail ? JSON.stringify(res.detail) : 'Failed to save variety. Check all fields.');
@@ -223,16 +228,22 @@ export default function PlantingModal({ editData, setEditData, seeds, setSeeds, 
           }
           if (method === 'nursery') {
             return (
-              <div className="grid-2">
+              <>
                 <div className="form-group">
-                  <label className="form-label">Purchase Date</label>
-                  <input type="date" className="form-input" value={editData.purchased_date || ''} onChange={e => setEditData(d => ({ ...d, purchased_date: e.target.value }))} />
+                  <label className="form-label">Nursery / Supplier</label>
+                  <input type="text" className="form-input" value={editData.supplier || ''} onChange={e => setEditData(d => ({ ...d, supplier: e.target.value || null }))} placeholder="e.g., Great Swamp Greenhouses, Home Depot" />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Planted Out Date</label>
-                  <input type="date" className="form-input" value={editData.planted_out_date || ''} onChange={e => setEditData(d => ({ ...d, planted_out_date: e.target.value }))} />
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">Purchase Date</label>
+                    <input type="date" className="form-input" value={editData.purchased_date || ''} onChange={e => setEditData(d => ({ ...d, purchased_date: e.target.value }))} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Planted Out Date</label>
+                    <input type="date" className="form-input" value={editData.planted_out_date || ''} onChange={e => setEditData(d => ({ ...d, planted_out_date: e.target.value }))} />
+                  </div>
                 </div>
-              </div>
+              </>
             );
           }
           // default: indoors

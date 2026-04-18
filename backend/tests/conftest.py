@@ -94,6 +94,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             first_harvest_date TEXT,
             status TEXT DEFAULT 'planned',
             notes TEXT,
+            supplier TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );

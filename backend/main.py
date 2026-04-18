@@ -227,6 +227,10 @@ def migrate_db():
     if "plant_guid" not in photo_cols:
         conn.execute("ALTER TABLE photos ADD COLUMN plant_guid TEXT")
 
+    # Nursery supplier name on plantings
+    if "supplier" not in planting_cols:
+        conn.execute("ALTER TABLE plantings ADD COLUMN supplier TEXT")
+
     conn.commit()
 
     # Backfill existing cells that have no plant_guid
@@ -533,7 +537,12 @@ def list_plantings(year: int = 2026):
         d["grid_structures"] = grid_info["structures"]   # beds/boxes where cells exist
         d["grid_cells_total"] = grid_info["total"]       # total plants physically placed
         d["placed_count"] = grid_info["total"]
-        d["unplaced_count"] = 0 if d.get("status") == "failed" else max(0, (d.get("qty_started") or 0) - grid_info["total"])
+        if d.get("status") == "failed":
+            d["unplaced_count"] = 0
+        elif d.get("method") == "nursery":
+            d["unplaced_count"] = max(0, (d.get("qty_planted") or 0) - grid_info["total"])
+        else:
+            d["unplaced_count"] = max(0, (d.get("qty_started") or 0) - grid_info["total"])
         result.append(d)
     conn.close()
     return result

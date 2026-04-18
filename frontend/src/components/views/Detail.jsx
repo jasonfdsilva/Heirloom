@@ -135,6 +135,7 @@ export default function Detail({
             <span className="badge badge-category" style={{ background: catColor(p.category) }}>{p.category}</span>
             {p.organic ? <span className="badge badge-organic" style={{ marginLeft: 8 }}>Organic</span> : null}
             {p.structure_name && <span style={{ marginLeft: 12 }}>📍 {p.structure_name}</span>}
+            {p.supplier && <span style={{ marginLeft: 12 }}>🏪 {p.supplier}</span>}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -155,8 +156,10 @@ export default function Detail({
               ['hardening_date', '🌤️ Hardening Off'],
               ['transplant_date', '🏡 Transplanted'],
               ['direct_sow_date', '🌿 Direct Sowed'],
+              ['purchased_date', '🛒 Purchased'],
+              ['planted_out_date', '🌳 Planted Out'],
               ['first_harvest_date', '🍅 First Harvest'],
-            ].map(([key, label]) => (
+            ].filter(([key]) => p[key]).map(([key, label]) => (
               <div key={key} style={{ padding: '8px 12px', background: p[key] ? '#faf8f5' : 'transparent', borderRadius: 8, border: p[key] ? '1px solid #e8e4dd' : '1px dashed #e8e4dd' }}>
                 <div style={{ fontSize: 11, color: '#8a8580', marginBottom: 2 }}>{label}</div>
                 <div style={{ fontWeight: 500, fontSize: 14 }}>{p[key] ? formatDate(p[key]) : 'Not set'}</div>
