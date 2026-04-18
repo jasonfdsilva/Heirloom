@@ -208,3 +208,113 @@ def test_bulk_event_rejects_empty_planting_ids(client):
         "event_type": "note",
     })
     assert r.status_code == 422
+
+
+# ── Failed event auto-status sync ────────────────────────────────────────────
+
+def _get_planting_status(client, pid):
+    r = client.get("/api/plantings?year=2026")
+    return next(p["status"] for p in r.json() if p["id"] == pid)
+
+
+def _get_unplaced_count(client, pid):
+    r = client.get("/api/plantings?year=2026")
+    return next(p["unplaced_count"] for p in r.json() if p["id"] == pid)
+
+
+def test_failed_event_auto_sets_planting_status(client):
+    """Logging a failed event automatically marks the planting as failed."""
+    pid = _create_planting(client)
+    assert _get_planting_status(client, pid) == "planned"
+    _create_event(client, pid, event_type="failed", details="Nothing germinated")
+    assert _get_planting_status(client, pid) == "failed"
+
+
+def test_failed_planting_has_zero_unplaced_count(client):
+    """Failed plantings report unplaced_count=0 regardless of qty_started."""
+    r = client.post(
+        "/api/plantings",
+        json={
+            "seed_id": "test-lettuce", "year": 2026, "quantity": 4,
+            "status": "planned", "indoor_start_date": "2026-03-01",
+            "hardening_date": None, "transplant_date": None,
+            "direct_sow_date": None, "first_harvest_date": None,
+            "notes": None, "structure_id": None,
+            "qty_started": 12, "qty_planted": 12,
+        },
+    )
+    pid = r.json()["id"]
+    assert _get_unplaced_count(client, pid) == 12
+    _create_event(client, pid, event_type="failed", details="Nothing germinated")
+    assert _get_unplaced_count(client, pid) == 0
+
+
+def test_deleting_failed_event_reverts_status_to_planned(client):
+    """Deleting the only failed event reverts the planting status to planned."""
+    pid = _create_planting(client)
+    event = _create_event(client, pid, event_type="failed", details="Failed")
+    assert _get_planting_status(client, pid) == "failed"
+    client.delete(f"/api/events/{event['id']}")
+    assert _get_planting_status(client, pid) == "planned"
+
+
+def test_deleting_one_failed_event_keeps_failed_if_another_remains(client):
+    """Deleting one failed event keeps status=failed if another failed event still exists."""
+    pid = _create_planting(client)
+    event1 = _create_event(client, pid, event_type="failed", details="First failure")
+    event2 = _create_event(client, pid, event_type="failed", details="Second failure")
+    client.delete(f"/api/events/{event1['id']}")
+    assert _get_planting_status(client, pid) == "failed"
+    client.delete(f"/api/events/{event2['id']}")
+    assert _get_planting_status(client, pid) == "planned"
+
+
+def test_updating_event_type_to_failed_sets_status(client):
+    """Editing an existing event's type to 'failed' auto-marks the planting failed."""
+    pid = _create_planting(client)
+    event = _create_event(client, pid, event_type="note", details="Just a note")
+    assert _get_planting_status(client, pid) == "planned"
+    client.put(f"/api/events/{event['id']}", json={
+        "event_date": "2026-03-15", "event_type": "failed",
+        "details": "Actually failed", "severity": None,
+        "product_used": None, "quantity": None,
+    })
+    assert _get_planting_status(client, pid) == "failed"
+
+
+def test_updating_event_away_from_failed_reverts_status(client):
+    """Editing a failed event to a non-failed type reverts status if no other failed events."""
+    pid = _create_planting(client)
+    event = _create_event(client, pid, event_type="failed", details="Failed")
+    assert _get_planting_status(client, pid) == "failed"
+    client.put(f"/api/events/{event['id']}", json={
+        "event_date": "2026-03-15", "event_type": "note",
+        "details": "Actually a note", "severity": None,
+        "product_used": None, "quantity": None,
+    })
+    assert _get_planting_status(client, pid) == "planned"
+
+
+def test_bulk_failed_event_sets_all_planting_statuses(client):
+    """Bulk logging a failed event marks all targeted plantings as failed."""
+    pid1 = _create_planting(client)
+    pid2 = _create_planting(client)
+    client.post("/api/events/bulk", json={
+        "planting_ids": [pid1, pid2],
+        "event_date": "2026-04-01",
+        "event_type": "failed",
+        "details": "Both failed",
+    })
+    assert _get_planting_status(client, pid1) == "failed"
+    assert _get_planting_status(client, pid2) == "failed"
+
+
+def test_duplicate_planting_resets_failed_status_to_planned(client):
+    """Duplicating a failed planting starts the duplicate as planned, not failed."""
+    pid = _create_planting(client)
+    _create_event(client, pid, event_type="failed", details="Failed")
+    assert _get_planting_status(client, pid) == "failed"
+    r = client.post(f"/api/plantings/{pid}/duplicate")
+    assert r.status_code == 200
+    new_pid = r.json()["id"]
+    assert _get_planting_status(client, new_pid) == "planned"

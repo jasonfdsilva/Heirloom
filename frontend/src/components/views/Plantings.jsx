@@ -19,7 +19,7 @@ export default function Plantings({
   bulkSelectMode, setBulkSelectMode, selectedPlantingIds, setSelectedPlantingIds, onBulkLogEvent,
 }) {
   const varietySummary = Object.values(
-    plantings.reduce((acc, p) => {
+    plantings.filter(p => p.status !== 'failed').reduce((acc, p) => {
       if (!acc[p.seed_id]) acc[p.seed_id] = { name: p.seed_name, category: p.category, common_name: p.common_name || null, rows: 0, started: 0, planted: 0, statusMap: {} };
       acc[p.seed_id].rows += 1;
       acc[p.seed_id].started += p.qty_started || 0;
@@ -276,6 +276,7 @@ export default function Plantings({
                         .filter(Boolean);
                       const isProjected = p.transplant_date && new Date(p.transplant_date + 'T00:00:00') > new Date();
                       const isSelected = selectedPlantingIds.has(p.id);
+                      const isFailed = p.status === 'failed';
                       const paddingLeft = isSubRow ? 32 : 8;
 
                       return (
@@ -284,6 +285,7 @@ export default function Plantings({
                             data-planting-id={p.id}
                             style={{
                               cursor: 'pointer',
+                              opacity: isFailed ? 0.45 : 1,
                               background: isSelected ? '#f0ece6' : isSubRow ? color + '06' : isExpanded ? '#faf8f5' : undefined,
                               outline: isSelected ? '2px solid #8a6a4a' : undefined,
                               outlineOffset: -2,
@@ -625,11 +627,13 @@ export default function Plantings({
                   const nextDate = p.transplant_date || p.direct_sow_date || p.indoor_start_date;
                   const nextIcon = p.transplant_date ? '🏡' : p.direct_sow_date ? '🌿' : '🏠';
                   const isSelected = selectedPlantingIds.has(p.id);
+                  const isFailed = p.status === 'failed';
 
                   return (
                     <div key={p.id} className="card"
                       style={{
                         marginBottom: 10, padding: '14px 16px', cursor: 'pointer',
+                        opacity: isFailed ? 0.45 : 1,
                         background: isSelected ? '#f0ece6' : undefined,
                         border: isSelected ? '2px solid #8a6a4a' : undefined,
                       }}

@@ -666,7 +666,7 @@ export default function App() {
     });
   });
 
-  const totalStarted = plantings.reduce((sum, p) => sum + (p.qty_started || 0), 0);
+  const totalStarted = plantings.filter(p => p.status !== 'failed').reduce((sum, p) => sum + (p.qty_started || 0), 0);
   const totalPlanted = plantings.reduce((sum, p) => sum + (p.qty_planted || 0), 0);
   const activePlantings = plantings.filter(p => p.status !== 'done');
   const harvestingCount = plantings.filter(p => p.status === 'harvesting').reduce((sum, p) => sum + (p.qty_planted || p.qty_started || 0), 0);

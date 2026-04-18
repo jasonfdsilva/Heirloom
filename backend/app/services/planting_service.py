@@ -55,7 +55,7 @@ def list_plantings(db: sqlite3.Connection, year: int = 2026) -> list:
         d["grid_structures"] = grid_info["structures"]
         d["grid_cells_total"] = grid_info["total"]
         d["placed_count"] = grid_info["total"]
-        d["unplaced_count"] = max(0, (d.get("qty_started") or 0) - grid_info["total"])
+        d["unplaced_count"] = 0 if d.get("status") == "failed" else max(0, (d.get("qty_started") or 0) - grid_info["total"])
         result.append(d)
     return result
 
@@ -110,7 +110,9 @@ def duplicate_planting(db: sqlite3.Connection, planting_id: int) -> dict:
         (o["seed_id"], None, o["year"], o.get("qty_started"), o.get("qty_planted"),
          o["indoor_start_date"], o["hardening_date"], o["transplant_date"],
          o["direct_sow_date"], o.get("method", "indoors"), o.get("purchased_date"),
-         o.get("planted_out_date"), o["first_harvest_date"], o["status"], o["notes"])
+         o.get("planted_out_date"), o["first_harvest_date"],
+         "planned" if o["status"] == "failed" else o["status"],  # never duplicate a failed status
+         o["notes"])
     )
     db.commit()
     return {"id": cursor.lastrowid, "message": "Planting duplicated"}

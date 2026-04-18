@@ -199,8 +199,9 @@ export default function BedPlanner({
               <div style={{ color: '#8a8580', fontSize: 13, padding: '12px 0' }}>No plantings yet. Create one to get started.</div>
             )}
             {(() => {
-              const inThisBed = plantings.filter(p => (p.grid_structures || []).includes(bed.id));
-              const notInThisBed = plantings.filter(p => !(p.grid_structures || []).includes(bed.id));
+              const activePlantings = plantings.filter(p => p.status !== 'failed');
+              const inThisBed = activePlantings.filter(p => (p.grid_structures || []).includes(bed.id));
+              const notInThisBed = activePlantings.filter(p => !(p.grid_structures || []).includes(bed.id));
               const unassigned = notInThisBed.filter(p => (p.unplaced_count || 0) > 0);
               const otherBeds = notInThisBed.filter(p => (p.unplaced_count || 0) === 0 && (p.grid_structures || []).length > 0);
 
