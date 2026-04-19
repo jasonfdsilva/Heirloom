@@ -424,9 +424,9 @@ test('clicking a painted cell shows action strip and opens full Detail view', as
   // Open Details navigates to the full Detail view (Edit, Duplicate, Log Event, Add Photo all available)
   await page.locator('button', { hasText: '📋 Open Details' }).click();
   await expect(page.locator('button', { hasText: '← Back to Bed Planner' })).toBeVisible({ timeout: 3000 });
-  // Detail view action buttons are present
-  await expect(page.locator('button', { hasText: /Log Event/ })).toBeVisible();
-  await expect(page.locator('button', { hasText: /Edit/ })).toBeVisible();
+  // Detail view action buttons are present (use the primary header button specifically)
+  await expect(page.getByRole('button', { name: '+ Log Event' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
 
   // Back button returns to BedPlanner (not Plantings)
   await page.locator('button', { hasText: '← Back to Bed Planner' }).click();
