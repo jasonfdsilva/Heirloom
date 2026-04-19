@@ -100,6 +100,7 @@ def init_db() -> None:  # pragma: no cover
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             seed_id TEXT NOT NULL REFERENCES seeds(id),
             structure_id TEXT REFERENCES structures(id),
+            seed_lot_id INTEGER REFERENCES seed_lots(id),
             year INTEGER DEFAULT 2026,
             quantity INTEGER,
             qty_started INTEGER,
@@ -114,6 +115,7 @@ def init_db() -> None:  # pragma: no cover
             first_harvest_date TEXT,
             status TEXT DEFAULT 'planned',
             notes TEXT,
+            supplier TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
@@ -256,6 +258,8 @@ def _m1_up(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE plantings ADD COLUMN purchased_date TEXT")
     if "planted_out_date" not in pc:
         conn.execute("ALTER TABLE plantings ADD COLUMN planted_out_date TEXT")
+    if "supplier" not in pc:
+        conn.execute("ALTER TABLE plantings ADD COLUMN supplier TEXT")
     # seeds
     sc = _cols(conn, "seeds")
     if "image_url" not in sc:
