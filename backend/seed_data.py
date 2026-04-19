@@ -36,7 +36,7 @@ INITIAL_STRUCTURES = [
     {"id": "bed-3", "name": "Bed 3", "type": "bed", "width": 6, "length": 3, "map_x": 175, "map_y": 350},
     {"id": "bed-4", "name": "Bed 4", "type": "bed", "width": 4, "length": 10, "map_x": 420, "map_y": 380},
     {"id": "bed-5", "name": "Bed 5", "type": "bed", "width": 6, "length": 2, "map_x": 175, "map_y": 465},
-    {"id": "bed-6", "name": "Bed 6", "type": "bed", "width": 6, "length": 2, "map_x": 175, "map_y": 580},
+    {"id": "bed-6", "name": "Bed 6", "type": "bed", "width": 6, "length": 4, "map_x": 175, "map_y": 551},
     {"id": "bed-7", "name": "Bed 7", "type": "bed", "width": 1.8, "length": 20, "map_x": 60, "map_y": 155},
     {"id": "bed-8", "name": "Bed 8", "type": "bed", "width": 20.5, "length": 1.8, "map_x": 110, "map_y": 755},
     {"id": "strip-1", "name": "Planting Strip", "type": "strip", "width": 1, "length": 15.5, "map_x": 610, "map_y": 294},
