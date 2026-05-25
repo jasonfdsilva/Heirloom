@@ -121,12 +121,12 @@ export default function GardenMap({
                 <rect x={x-2} y={y+h-5} width={7} height={7} fill={BED_BORDER} rx={1.5}/>
                 <rect x={x+w-5} y={y+h-5} width={7} height={7} fill={BED_BORDER} rx={1.5}/>
               </>}
-              {isStrip && (
+              {isStrip && !hasCells && (
                 <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
                   fill="rgba(255,255,255,0.75)" fontSize={8} fontWeight="600" fontFamily="DM Sans"
                   transform={`rotate(-90,${cx},${cy})`}>{s.name}</text>
               )}
-              {!isStrip && cells.map(c => {
+              {cells.map(c => {
                 const info = pInfoMap[c.planting_id];
                 const cellX = x + c.col * cellPxW;
                 const cellY = y + c.row * cellPxH;
@@ -156,7 +156,7 @@ export default function GardenMap({
                   </g>
                 );
               })}
-              {!isStrip && !hasCells && (
+              {!hasCells && !isStrip && (
                 <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
                   fill={isBox ? '#b8a898' : '#c4b8a8'} fontSize={isBox ? 7 : 8}
                   fontFamily="DM Sans" fontStyle="italic">empty</text>
@@ -313,7 +313,7 @@ export default function GardenMap({
                   return renderLabel(sKey, cx, y - 4, s.name, '#fbbf24', isBox ? 8 : 10, 'middle', { x: cx, y: y - 4, orientation: 'horizontal', hidden: false });
                 })()}
                 {/* Plant labels — one per cluster, mint green, with bracket + dashed leader line */}
-                {!isStrip && plantingClusters.map(({ pid, name, minR, maxR, minC, maxC, stackIndex }) => {
+                {plantingClusters.map(({ pid, name, minR, maxR, minC, maxC, stackIndex }) => {
                   const spanLeft = x + minC * cellPxW;
                   const spanRight = x + (maxC + 1) * cellPxW;
                   const clusterMidX = (spanLeft + spanRight) / 2;
