@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import api from '../../lib/api';
 import { catColor } from '../../lib/colors';
 import GardenMap from '../garden/GardenMap';
+import PrintView from './PrintView';
 
 export default function GardenMapView({
   // GardenMap props (forwarded)
@@ -28,14 +29,27 @@ export default function GardenMapView({
   // Structure summary
   plantingsByStructure,
 }) {
+  const [showPrint, setShowPrint] = useState(false);
+
   return (
     <div>
+      {showPrint && (
+        <PrintView
+          structures={structures}
+          plantings={plantings}
+          seeds={seeds}
+          mapGridCells={mapGridCells}
+          labelPositions={labelPositions}
+          onClose={() => setShowPrint(false)}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
         <div>
           <h1 className="page-title">Garden Map</h1>
           <p className="page-sub" style={{ marginBottom: 0 }}>Click any bed or box to open the planner</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 24 }}>
+          <button className="btn btn-secondary" onClick={() => setShowPrint(true)}>🖨️ Print</button>
           <button
             className="btn btn-secondary"
             style={{ background: mapEditMode ? '#2d2a24' : undefined, color: mapEditMode ? '#e8c56d' : undefined }}
